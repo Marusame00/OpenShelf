@@ -67,6 +67,17 @@ function fmtDate(ms) {
   return new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// ---- responsive sidebar drawer (mobile) ------------------------------------
+
+function setSidebar(open) {
+  el('sidebar').classList.toggle('open', open);
+  el('backdrop').classList.toggle('show', open);
+}
+el('btn-menu').onclick = () => setSidebar(true);
+el('btn-close-menu').onclick = () => setSidebar(false);
+el('backdrop').onclick = () => setSidebar(false);
+window.addEventListener('resize', () => { if (innerWidth > 900) setSidebar(false); });
+
 // ---- roots ----------------------------------------------------------------
 
 async function loadRoots() {

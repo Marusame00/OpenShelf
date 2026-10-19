@@ -8,6 +8,7 @@
 </head>
 <body>
   <header id="topbar">
+    <button id="btn-menu" title="Libraries" aria-label="Toggle libraries">☰</button>
     <h1>OpenShelf</h1>
     <div id="nav-crumbs" class="crumbs"></div>
     <div id="top-actions">
@@ -16,7 +17,9 @@
   </header>
 
   <main id="layout">
+    <div id="backdrop"></div>
     <aside id="sidebar">
+      <h2 class="sidebar-title">Libraries <button id="btn-close-menu" aria-label="Close libraries">✕</button></h2>
       <section>
         <h2>Libraries</h2>
         <ul id="root-list"></ul>
