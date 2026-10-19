@@ -16,6 +16,7 @@ export function parseConfig(argv = process.argv.slice(2), env = process.env) {
     cacheTtlMs: parseInt(env.OSHELF_CACHE_TTL || '30000', 10),
     storeFile: env.OSHELF_STORE || 'sortstore.json',
     dataDir: env.OSHELF_DATA || null,
+    upnp: env.OSHELF_UPNP !== 'off' && env.OSHELF_UPNP !== '0',
   };
 
   const flags = argv;
@@ -27,9 +28,9 @@ export function parseConfig(argv = process.argv.slice(2), env = process.env) {
   }
   if (cfg.configFile) {
     const fileCfg = JSON.parse(fs.readFileSync(cfg.configFile, 'utf8'));
-    for (const k of ['host', 'port', 'roots', 'cacheTtlMs', 'storeFile', 'dataDir']) {
-      if (fileCfg[k] !== undefined) cfg[k] = fileCfg[k];
-    }
+  for (const k of ['host', 'port', 'roots', 'cacheTtlMs', 'storeFile', 'dataDir', 'upnp']) {
+    if (fileCfg[k] !== undefined) cfg[k] = fileCfg[k];
+  }
   }
 
   // Flat flags override the file.

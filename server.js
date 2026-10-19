@@ -9,6 +9,7 @@ import { parseConfig, printHelp } from './src/config.js';
 import { Library } from './src/library.js';
 import { createApp } from './src/httpapp.js';
 import { SortStore } from './src/sortstore.js';
+import { startUpnp } from './src/upnp.js';
 
 const cfg = parseConfig();
 if (cfg.help) {
@@ -33,6 +34,7 @@ const server = createApp({ roots, declaredRootIds: [...declaredRootIds], lib, st
 server.listen(cfg.port, cfg.host, () => {
   console.log(`OpenShelf listening on http://${cfg.host}:${cfg.port}`);
   for (const r of cfg.roots) console.log(`  root: ${r.path}`);
+  if (cfg.upnp !== false) startUpnp({ server, roots, lib, store }); // stub in v1
 });
 
 process.on('SIGINT', () => { server.close(() => process.exit(0)); });
