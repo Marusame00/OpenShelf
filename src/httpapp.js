@@ -14,12 +14,27 @@
 import fs from 'node:fs/promises';
 import fss from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import {
   Library, classify, mediaType, compareEntries, applyManualOrder, SORT_KEYS,
 } from './library.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8' };
+const APP_DIR = path.dirname(fileURLToPath(import.meta.url)); // this module's dir
+
+// Static-file MIME map. Module scripts in particular *require* a JS MIME
+// type or the browser refuses to execute them.
+const STATIC_MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.json': 'application/json',
+};
 
 export function createApp({ roots, declaredRootIds = [], lib, store }) {
   const server = createServer(asyncHandler(route));
@@ -68,6 +83,7 @@ export function createApp({ roots, declaredRootIds = [], lib, store }) {
 
       if (pathname === '/api/sort') return await sortRoutes(req, res, q);
       if (pathname === '/api/roots') return await rootsRoutes(req, res, q);
+      if (pathname === '/api/default') return await defaultRoutes(req, res);
 
       if (pathname === '/api/stream') {
         const root = findRoot(q.get('root'));
@@ -77,10 +93,13 @@ export function createApp({ roots, declaredRootIds = [], lib, store }) {
       }
 
       // Static UI
-      if (pathname === '/') return await serveFile(res, path.join(import.meta.dirname, '../public/index.html'), 'text/html; charset=utf-8');
+      if (pathname === '/') {
+        return await serveFile(res, path.join(APP_DIR, '../public/index.html'), 'text/html; charset=utf-8');
+      }
       if (pathname.startsWith('/public/')) {
-        const file = path.join(import.meta.dirname, '..', 'public', pathname.slice('/public/'.length));
-        return await serveFile(res, file, null);
+        const file = path.join(APP_DIR, '..', 'public', pathname.slice('/public/'.length));
+        const type = STATIC_MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
+        return await serveFile(res, file, type);
       }
 
       json(res, 404, { error: { code: 'NOT_FOUND', message: 'No such route' } });
@@ -125,6 +144,23 @@ export function createApp({ roots, declaredRootIds = [], lib, store }) {
       mtimeMs: e.mtimeMs, link: e.link, readable: e.readable,
       duration: e.duration, error: e.error || undefined,
     };
+  }
+
+  // ---- Global default sort -------------------------------------------------
+
+  async function defaultRoutes(req, res) {
+    if (req.method === 'GET') {
+      return json(res, 200, { default: store.data.defaultSort });
+    }
+    if (req.method === 'PUT') {
+      const body = await readJson(req);
+      if (!body.key || ![...SORT_KEYS].includes(body.key) || !['asc', 'desc'].includes(body.dir)) {
+        return json(res, 400, { error: { code: 'BAD_DEFAULT', message: 'Valid { key, dir } required' } });
+      }
+      await store.setDefault({ key: body.key, dir: body.dir });
+      return json(res, 200, { ok: true, default: store.data.defaultSort });
+    }
+    return json(res, 405, { error: { code: 'METHOD', message: 'Use GET or PUT' } });
   }
 
   // ---- Sort preference API -------------------------------------------------

@@ -4,16 +4,76 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OpenShelf</title>
+  <link rel="stylesheet" href="/public/style.css">
 </head>
 <body>
-  <main>
+  <header id="topbar">
     <h1>OpenShelf</h1>
-    <p>Step 1 build: the API is live. UI arrives in step 3.</p>
-    <ul>
-      <li><a href="/api/roots">/api/roots</a> — configured library roots</li>
-      <li><a href="/api/browse?root=ROOT_ID">/api/browse</a> — folder listing (JSON)</li>
-      <li><a href="/api/stream?root=ROOT_ID&amp;path=FILE">/api/stream</a> — ranged file serving</li>
-    </ul>
+    <div id="nav-crumbs" class="crumbs"></div>
+    <div id="top-actions">
+      <button id="btn-add-root" title="Add a library folder">+ Folder</button>
+    </div>
+  </header>
+
+  <main id="layout">
+    <aside id="sidebar">
+      <section>
+        <h2>Libraries</h2>
+        <ul id="root-list"></ul>
+        <form id="add-root-form" class="hidden">
+          <input id="add-root-path" type="text" placeholder="C:/path/to/media" autocomplete="off">
+          <button type="submit">Add</button>
+          <button type="button" id="add-root-cancel">Cancel</button>
+        </form>
+      </section>
+      <section>
+        <h2>Default sort</h2>
+        <p class="hint">Applies to folders without their own sort.</p>
+        <div class="row">
+          <select id="default-key"></select>
+          <select id="default-dir">
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
+          </select>
+        </div>
+      </section>
+      <section class="about">
+        <p>OpenShelf serves files exactly as stored — no transcoding, ever.</p>
+      </section>
+    </aside>
+
+    <section id="content">
+      <div id="sortbar">
+        <label for="sort-key">Sort</label>
+        <select id="sort-key"></select>
+        <select id="sort-dir">
+          <option value="asc">Ascending</option>
+          <option value="desc">Descending</option>
+        </select>
+        <button id="btn-save-sort">Save for this folder</button>
+        <button id="btn-reset-sort" title="Use the default again">Inherit</button>
+        <span id="sort-origin" class="origin"></span>
+      </div>
+
+      <div id="folder-actions" class="hidden">
+        <p id="manual-hint"></p>
+        <button id="btn-manual-done">Done arranging</button>
+      </div>
+
+      <ul id="entry-list"></ul>
+      <p id="empty-hint" class="hidden">This folder is empty.</p>
+      <p id="load-error" class="hidden"></p>
+    </section>
   </main>
+
+  <div id="player-modal" class="hidden">
+    <div class="modal-box">
+      <button id="player-close" aria-label="Close">&times;</button>
+      <h3 id="player-name"></h3>
+      <div id="player-body"></div>
+    </div>
+  </div>
+
+  <script src="/public/app.js" type="module"></script>
 </body>
 </html>
