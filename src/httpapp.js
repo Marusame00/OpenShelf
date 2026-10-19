@@ -15,11 +15,13 @@ import fs from 'node:fs/promises';
 import fss from 'node:fs';
 import path from 'node:path';
 import { createServer } from 'node:http';
-import { Library, classify, mediaType, compareEntries } from './library.js';
+import {
+  Library, classify, mediaType, compareEntries, applyManualOrder, SORT_KEYS,
+} from './library.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8' };
 
-export function createApp({ roots, lib, ttlMs = 30000, getSort = () => null }) {
+export function createApp({ roots, declaredRootIds = [], lib, store }) {
   const server = createServer(asyncHandler(route));
 
   async function route(req, res) {
@@ -28,27 +30,44 @@ export function createApp({ roots, lib, ttlMs = 30000, getSort = () => null }) {
     const q = url.searchParams;
 
     try {
-      if (pathname === '/api/roots') return json(res, 200, { roots: rootsPublic() });
+      if (pathname === '/api/roots' && req.method === 'GET') {
+        return json(res, 200, { roots: rootsPublic() });
+      }
 
       if (pathname === '/api/browse') {
         const root = findRoot(q.get('root'));
         if (!root) return json(res, 400, { error: { code: 'UNKNOWN_ROOT', message: 'Unknown root' } });
         const dir = resolveWithin(root.path, q.get('path') || '');
         const entries = await lib.list(dir);
-        const sort = getSort(dir); // { key, dir } or null -> default
-        const eff = sort || { key: 'name', dir: 'asc' };
-        const sorted = [...entries].sort((a, b) =>
-          compareEntries(a, b, eff.key, eff.dir, new Map()));
+        const names = entries.map((e) => e.name);
+        // Adopt-first ordering matters: recordAdded() would create an entry at
+        // this key and suppress the orphan-adoption path in effective().
+        const eff = await store.effective(dir, names);
+        void store.recordAdded(dir, names); // first-seen timestamps (debounced)
+        const pref = eff.pref;
+        let sorted;
+        if (pref.key === 'manual' && eff.folder) {
+          sorted = applyManualOrder(entries, eff.pref.manualOrder || []);
+        } else if (pref.key === 'manual') {
+          // inherited manual order describes the parent's children, not ours
+          sorted = [...entries].sort((a, b) => compareEntries(a, b, 'name', pref.dir));
+        } else {
+          const addedMs = new Map(Object.entries(pref.added || {}));
+          sorted = [...entries].sort((a, b) => compareEntries(a, b, pref.key, pref.dir, addedMs));
+        }
         const rel = path.relative(root.path, dir) || '';
         return json(res, 200, {
           root: root.id, path: rel, name: path.basename(dir) || root.name,
           parent: rel ? (path.dirname(rel) === '.' ? '' : path.dirname(rel)) : null,
-          sort: eff, // what was applied
-          saved: sort !== null, // whether a per-folder pref exists
+          sort: { key: pref.key, dir: pref.dir },
+          sortOrigin: originInfo(root, eff),
           count: entries.length,
           entries: sorted.map(pubEntry),
         });
       }
+
+      if (pathname === '/api/sort') return await sortRoutes(req, res, q);
+      if (pathname === '/api/roots') return await rootsRoutes(req, res, q);
 
       if (pathname === '/api/stream') {
         const root = findRoot(q.get('root'));
@@ -67,7 +86,10 @@ export function createApp({ roots, lib, ttlMs = 30000, getSort = () => null }) {
       json(res, 404, { error: { code: 'NOT_FOUND', message: 'No such route' } });
     } catch (err) {
       const code = err.code || 'INTERNAL';
-      const status = { ENOENT: 404, ENOTDIR: 404, EACCES: 403, EPERM: 403 }[code] || 500;
+      const status = {
+        ENOENT: 404, ENOTDIR: 404, EACCES: 403, EPERM: 403,
+        BAD_JSON: 400, PAYLOAD_TOO_LARGE: 400,
+      }[code] || 500;
       if (status === 500) console.error('[http]', err);
       if (!res.headersSent) json(res, status, { error: { code, message: err.message } });
       else res.destroy();
@@ -103,6 +125,90 @@ export function createApp({ roots, lib, ttlMs = 30000, getSort = () => null }) {
       mtimeMs: e.mtimeMs, link: e.link, readable: e.readable,
       duration: e.duration, error: e.error || undefined,
     };
+  }
+
+  // ---- Sort preference API -------------------------------------------------
+
+  async function sortRoutes(req, res, q) {
+    const root = findRoot(q.get('root'));
+    if (!root) return json(res, 400, { error: { code: 'UNKNOWN_ROOT', message: 'Unknown root' } });
+    const abs = resolveWithin(root.path, q.get('path') || '');
+    if (req.method === 'GET') {
+      return json(res, 200, {
+        default: store.data.defaultSort,
+        own: await store.get(abs),
+        effective: await store.effective(abs),
+      });
+    }
+    if (req.method === 'PUT') {
+      const body = await readJson(req);
+      const patch = {};
+      if (Object.hasOwn(body, 'key')) patch.key = body.key;
+      if (Object.hasOwn(body, 'dir')) patch.dir = body.dir;
+      if (Array.isArray(body.manualOrder)) patch.manualOrder = body.manualOrder;
+      if ('key' in patch && patch.key !== null && ![...SORT_KEYS, 'manual'].includes(patch.key)) {
+        return json(res, 400, { error: { code: 'BAD_SORT_KEY', message: `Unknown sort key: ${patch.key}` } });
+      }
+      if ('dir' in patch && patch.dir !== null && !['asc', 'desc'].includes(patch.dir)) {
+        return json(res, 400, { error: { code: 'BAD_DIR', message: 'dir must be asc or desc' } });
+      }
+      await store.set(abs, patch);
+      return json(res, 200, { ok: true, own: await store.get(abs) });
+    }
+    if (req.method === 'DELETE') {
+      await store.clear(abs);
+      return json(res, 200, { ok: true });
+    }
+    return json(res, 405, { error: { code: 'METHOD', message: 'Use GET, PUT or DELETE' } });
+  }
+
+  // ---- Runtime root management ---------------------------------------------
+
+  async function rootsRoutes(req, res, q) {
+    if (req.method === 'POST') {
+      const body = await readJson(req);
+      if (!body.path) return json(res, 400, { error: { code: 'BAD_ROOT', message: 'path required' } });
+      let st;
+      try {
+        st = await fss.promises.stat(body.path);
+      } catch (e) {
+        return json(res, 400, { error: { code: 'BAD_ROOT', message: `Cannot access path: ${e.message}` } });
+      }
+      if (!st.isDirectory()) return json(res, 400, { error: { code: 'BAD_ROOT', message: 'Not a directory' } });
+      const abs = path.resolve(body.path);
+      const root = {
+        id: abs.replace(/\\/g, '/').toLowerCase(),
+        path: abs,
+        name: body.name || path.basename(abs) || abs,
+      };
+      if (!findRoot(root.id)) {
+        roots.push(root);
+        await store.addRoot(root);
+      }
+      return json(res, 201, { root: roots.find((r) => r.id === root.id) });
+    }
+    if (req.method === 'DELETE') {
+      const id = (q.get('id') || '').replace(/\\/g, '/').toLowerCase();
+      if (!id) return json(res, 400, { error: { code: 'BAD_ROOT', message: 'id required' } });
+      if (declaredRootIds.includes(id)) {
+        return json(res, 400, { error: { code: 'CONFIG_ROOT', message: 'Root is declared in config; remove it there' } });
+      }
+      await store.removeRoot(id);
+      const i = roots.findIndex((r) => r.id === id);
+      if (i === -1) return json(res, 404, { error: { code: 'NOT_FOUND', message: 'No such root' } });
+      roots.splice(i, 1);
+      return json(res, 200, { ok: true });
+    }
+    return json(res, 405, { error: { code: 'METHOD', message: 'Use POST or DELETE' } });
+  }
+
+  /** Where the applied sort came from: this folder, an ancestor, or global. */
+  function originInfo(root, eff) {
+    if (eff.origin === '') return { level: 'global', path: '' };
+    const abs = eff.origin.replace(/\//g, path.sep);
+    let rel = path.relative(root.path, abs).replace(/\\/g, '/');
+    if (rel.startsWith('..')) rel = abs; // outside this root — show absolute
+    return { level: eff.folder ? 'folder' : 'parent', path: rel };
   }
 
   return server;
@@ -187,6 +293,29 @@ async function serveFile(res, abs, type) {
 function json(res, status, obj) {
   res.writeHead(status, JSON_HEADERS);
   res.end(JSON.stringify(obj));
+}
+
+/** Read a small JSON request body; empty body resolves to {}. */
+function readJson(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > 1_000_000) {
+        reject(Object.assign(new Error('Body too large'), { code: 'PAYLOAD_TOO_LARGE' }));
+      } else chunks.push(c);
+    });
+    req.on('end', () => {
+      if (chunks.length === 0) return resolve({});
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      } catch {
+        reject(Object.assign(new Error('Invalid JSON'), { code: 'BAD_JSON' }));
+      }
+    });
+    req.on('error', reject);
+  });
 }
 
 /** Wrap the router so thrown errors reach the catch block in `route`. */

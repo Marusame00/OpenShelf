@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import { parseConfig, printHelp } from './src/config.js';
 import { Library } from './src/library.js';
 import { createApp } from './src/httpapp.js';
+import { SortStore } from './src/sortstore.js';
 
 const cfg = parseConfig();
 if (cfg.help) {
@@ -17,16 +18,17 @@ if (cfg.help) {
 
 validateConfig(cfg);
 
+const store = new SortStore({ file: cfg.storeFile });
+await store.load();
+
+// Runtime-managed roots (added via the GUI) survive restarts in the store;
+// CLI/config-file roots are re-declared every start and cannot be removed
+// through the UI.
+const declaredRootIds = new Set(cfg.roots.map((r) => r.id));
+const roots = [...cfg.roots, ...store.getRoots()];
 const lib = new Library({ ttlMs: cfg.cacheTtlMs });
 
-// Step 1 has no sort store yet: every folder uses the name/asc default.
-// Step 2 injects a SortStore here and wires it to getSort().
-const server = createApp({
-  roots: cfg.roots,
-  lib,
-  ttlMs: cfg.cacheTtlMs,
-  getSort: () => null,
-});
+const server = createApp({ roots, declaredRootIds: [...declaredRootIds], lib, store });
 
 server.listen(cfg.port, cfg.host, () => {
   console.log(`OpenShelf listening on http://${cfg.host}:${cfg.port}`);
