@@ -12,7 +12,9 @@
 //  - The platform collator gives natural, locale-aware sort (a2.mp4 < a10.mp4).
 
 import fs from 'node:fs/promises';
+import fss from 'node:fs';
 import path from 'node:path';
+import { probeDuration } from './probe.js';
 
 export const KINDS = {
   video: ['.mp4', '.m4v', '.mkv', '.webm', '.mov', '.avi', '.mpg', '.mpeg', '.ts', '.m2ts', '.flv'],
@@ -62,9 +64,16 @@ export class Library {
     const entries = [];
     for (const name of names) {
       const full = path.join(absDir, name);
-      let entry = null;
+      let entry;
       try {
-        const [st, lst] = await Promise.all([fs.stat(full), fs.lstat(full)]);
+        // Sync stats for broken-entry safety: on some Windows paths (names
+        // readdir returns but the filesystem cannot resolve) Node 20.10's
+        // fs.promises.stat delivers a *second* rejection with no handler,
+        // which crashes the process even inside try/catch. statSync has no
+        // promise machinery, so nothing can double-fire.
+        const st = fss.statSync(full);
+        let lst = null;
+        try { lst = fss.lstatSync(full); } catch { lst = st; }
         const isDir = st.isDirectory();
         entry = {
           name, path: full,
@@ -72,15 +81,16 @@ export class Library {
           kind: classify(name, isDir),
           link: lst.isSymbolicLink(),
           readable: true,
-          duration: null, // filled lazily by the probe (step 4)
+          duration: null, // filled lazily by the probe
         };
       } catch (err) {
-        // Unreadable entry (permission, dangling symlink, vanished file):
-        // keep a placeholder so the folder still lists, marked explicitly.
+        // Unreadable entry (permission, dangling symlink, vanished file,
+        // broken NTFS name): keep a placeholder so the folder still lists.
+        const msg = err && err.code ? err.code : String(err);
         entry = {
           name, path: full, isDir: false, size: null, mtimeMs: null,
           kind: 'other', link: null, readable: false, duration: null,
-          error: err.code || String(err),
+          error: msg,
         };
       }
       entries.push(entry);
@@ -92,6 +102,27 @@ export class Library {
   /** Force a re-list on the next request (used when a folder mutates externally). */
   invalidate(absDir) {
     this.cache.delete(absDir);
+  }
+
+  /**
+   * Lazily probe durations for media entries in a freshly listed folder.
+   * Only called when the folder's effective sort is `duration` — avoids
+   * probing entire libraries for nothing. Results are stored back on the
+   * cached entries, so a repeat visit costs nothing. Failures leave
+   * duration null (sorts last in ascending order).
+   */
+  async enrichDurations(absDir, entries) {
+    const targets = entries.filter((e) => !e.isDir && (e.kind === 'video' || e.kind === 'audio') && e.readable && e.duration === null);
+    if (targets.length === 0) return;
+    await Promise.all(targets.map(async (e) => {
+      try {
+        e.duration = await probeDuration(e.path);
+      } catch {
+        e.duration = null;
+      }
+    }));
+    const hit = this.cache.get(absDir);
+    if (hit) hit.at = Date.now(); // keep the enriched entries fresh
   }
 }
 

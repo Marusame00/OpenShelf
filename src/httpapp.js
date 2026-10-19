@@ -58,7 +58,7 @@ export function createApp({ roots, declaredRootIds = [], lib, store }) {
         // Adopt-first ordering matters: recordAdded() would create an entry at
         // this key and suppress the orphan-adoption path in effective().
         const eff = await store.effective(dir, names);
-        void store.recordAdded(dir, names); // first-seen timestamps (debounced)
+        void store.recordAdded(dir, names).catch(() => {}); // first-seen timestamps (debounced; never crash on store errors)
         const pref = eff.pref;
         let sorted;
         if (pref.key === 'manual' && eff.folder) {
@@ -67,6 +67,7 @@ export function createApp({ roots, declaredRootIds = [], lib, store }) {
           // inherited manual order describes the parent's children, not ours
           sorted = [...entries].sort((a, b) => compareEntries(a, b, 'name', pref.dir));
         } else {
+          if (pref.key === 'duration') await lib.enrichDurations(dir, entries);
           const addedMs = new Map(Object.entries(pref.added || {}));
           sorted = [...entries].sort((a, b) => compareEntries(a, b, pref.key, pref.dir, addedMs));
         }
@@ -253,7 +254,14 @@ export function createApp({ roots, declaredRootIds = [], lib, store }) {
 // ---- Range streaming -------------------------------------------------------
 
 async function serveRange(req, res, abs) {
-  const st = await fs.stat(abs); // absent file => ENOENT -> 404
+  // Callback-form stat: fs.promises.stat can double-deliver on pathological
+  // names (see library.js note) and crash the process. Callbacks fire once.
+  const st = await new Promise((resolve) => {
+    fss.stat(abs, (err, stats) => (err ? resolve(null) : resolve(stats)));
+  });
+  if (!st) {
+    return json(res, 404, { error: { code: 'ENOENT', message: 'File not found or unreadable' } });
+  }
   if (!st.isFile()) return json(res, 400, { error: { code: 'NOT_A_FILE', message: 'Path is not a file' } });
 
   const size = st.size;

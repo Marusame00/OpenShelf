@@ -161,11 +161,9 @@ export class SortStore {
     for (const n of names) {
       if (!(n in added)) { added[n] = now; changed = true; }
     }
-    if (changed) {
-      this.data.folders[key] = { ...pref, added };
-      this.scheduleFlush();
-    }
-    this.data.folders[key].childrenHash = nameHash(names);
+    if (!this.data.folders[key]) changed = true; // first visit: must create the entry
+    if (changed) this.scheduleFlush();
+    this.data.folders[key] = { ...pref, added, childrenHash: nameHash(names) };
   }
 
   /**
