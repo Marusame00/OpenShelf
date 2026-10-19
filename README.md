@@ -16,6 +16,10 @@ A lightweight, self-hosted media server that **serves your media files exactly a
 
 ## Quick start
 
+**Windows:** double-click `start.bat` — it opens the web UI in your browser and serves your library (edit `openshelf.config.json` — copy the example first — to choose which folders are roots). `stop.bat` force-closes the server and frees its memory.
+
+**Anywhere (Node >= 18, zero dependencies):**
+
 ```sh
 node server.js --root "C:/Media/Movies" --root "C:/Media/Music" --port 8090
 ```
@@ -114,13 +118,19 @@ src/httpapp.js       HTTP routes, Range streaming, static UI
 src/library.js       Lazy directory cache, classification, sorting
 src/sortstore.js     Per-folder sort persistence (JSON, atomic, adoption)
 src/probe.js         Zero-dependency mp4/mkv duration probing
-src/upnp.js          UPnP/DLNA stub (structure + implementation notes)
+src/upnp.js          UPnP/DLNA: SSDP discovery + ContentDirectory SOAP
+start.bat / stop.bat Windows launcher: start with browser, force-stop
 public/              index.html, app.js, style.css (no build step)
 ```
 
-## DLNA / UPnP (planned, stubbed)
+## DLNA / UPnP
 
-`src/upnp.js` documents everything a real implementation needs: SSDP multicast discovery, device description, ContentDirectory SOAP Browse mapped onto the existing library/sort logic, and GENA eventing. The HTTP layer already streams with Range — exactly what DLNA clients expect. Enable `--upnp on` (default) once implemented; firewall inbound rule for UDP 1900 required.
+Implemented: OpenShelf announces itself as a UPnP MediaServer and answers ContentDirectory Browse over SOAP, reusing the exact same library + per-folder sort logic as the web UI — so your saved sorts apply to DLNA clients too. Use BubbleUPnP (or any UPnP browser) to find "OpenShelf", then browse your library folders; files stream with Range support through the same `/api/stream` endpoint (no transcoding).
+
+- **Discovery**: SSDP on `239.255.255.250:1900` — responds to M-SEARCH and sends NOTIFY alive every 60 s. On Windows the OS "SSDP Discovery" service (SSDPSRV) binds port 1900 first and Windows delivers multicast to only one socket; if a device doesn't see OpenShelf, stop that service from an admin prompt: `net stop SSDPSRV` (this is the known Windows fix; OpenShelf logs this hint at startup).
+- Device description: `/upnp/device.xml`; services: ContentDirectory (`/upnp/control`) and ConnectionManager.
+- Sort memory travels: Browse applies the stored/inherited sort for each folder via `store.effective()`.
+- Toggle with `--upnp off` / `"upnp": false` in the config file.
 
 ## Development
 
@@ -131,6 +141,6 @@ node server.js --root <media> --port 8090   # run
 
 ## Roadmap (not v1)
 
-- Real UPnP/DLNA discovery + ContentDirectory
 - Probes for more containers (avi, webm durations need deeper parsing or an external tool)
 - Metadata scraping hook (the `entry` shape already carries `kind`/`duration`; a scraper would add `title`, `year`, artwork)
+- Optional: serve SMB-style OS mounting via WebDAV (reuses the browse/stream layer)

@@ -1,0 +1,11 @@
+{
+  "host": "0.0.0.0",
+  "port": 8090,
+  "roots": [
+    "C:/Media/Movies",
+    "C:/Media/Music"
+  ],
+  "cacheTtlMs": 30000,
+  "storeFile": "sortstore.json",
+  "upnp": true
+}

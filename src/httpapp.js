@@ -36,7 +36,7 @@ const STATIC_MIME = {
   '.json': 'application/json',
 };
 
-export function createApp({ roots, declaredRootIds = [], lib, store }) {
+export function createApp({ roots, declaredRootIds = [], lib, store, extra }) {
   const server = createServer(asyncHandler(route));
 
   async function route(req, res) {
@@ -101,6 +101,12 @@ export function createApp({ roots, declaredRootIds = [], lib, store }) {
         const file = path.join(APP_DIR, '..', 'public', pathname.slice('/public/'.length));
         const type = STATIC_MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
         return await serveFile(res, file, type);
+      }
+
+      // Optional extra surface (currently UPnP/DLNA). It returns true when
+      // it handled the request; false falls through to the 404 below.
+      if (extra) {
+        if (await extra(req, res, url)) return;
       }
 
       json(res, 404, { error: { code: 'NOT_FOUND', message: 'No such route' } });

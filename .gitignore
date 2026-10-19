@@ -1,5 +1,6 @@
 node_modules/
 .scratch/
 sortstore.json
+openshelf.config.json
 *.log
 .DS_Store
