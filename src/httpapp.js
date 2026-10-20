@@ -271,8 +271,21 @@ async function serveRange(req, res, abs) {
   if (!st.isFile()) return json(res, 400, { error: { code: 'NOT_A_FILE', message: 'Path is not a file' } });
 
   if (!st.isFile()) return json(res, 400, { error: { code: 'NOT_A_FILE', message: 'Path is not a file' } });
-
   const size = st.size;
+  if (size === 0) {
+    // Empty files have no bytes to stream; serve a clean 0-length
+    // response instead of letting createReadStream(0,-1) throw
+    // ERR_OUT_OF_RANGE on every Range/seek request.
+    res.writeHead(200, {
+      'Content-Type': mediaType(abs),
+      'Content-Length': 0,
+      'Last-Modified': new Date(st.mtimeMs).toUTCString(),
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-transform',
+    });
+    return res.end();
+  }
+
   const mtime = new Date(st.mtimeMs).toUTCString();
   const type = mediaType(abs);
 
