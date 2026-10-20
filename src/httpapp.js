@@ -270,6 +270,8 @@ async function serveRange(req, res, abs) {
   }
   if (!st.isFile()) return json(res, 400, { error: { code: 'NOT_A_FILE', message: 'Path is not a file' } });
 
+  if (!st.isFile()) return json(res, 400, { error: { code: 'NOT_A_FILE', message: 'Path is not a file' } });
+
   const size = st.size;
   const mtime = new Date(st.mtimeMs).toUTCString();
   const type = mediaType(abs);
@@ -300,13 +302,22 @@ async function serveRange(req, res, abs) {
   }
   return send(200, headers, 0, size - 1);
 
-  function send(status, h, start, end) {
+  /**
+   * writeHead + pipe the requested range; never returns undefined.
+   * serveRange is awaited from route(), which uses the truthiness to know
+   * the response is done — an undefined return would make route() fall
+   * through to the 404 and double-write (ERR_HTTP_HEADERS_SENT).
+   */
+  async function send(status, h, start, end) {
     const len = end - start + 1;
     res.writeHead(status, { ...h, 'Content-Length': len });
-    if (req.method === 'HEAD') return res.end();
-    const stream = fss.createReadStream(abs, { start, end, autoClose: true });
-    stream.on('error', () => res.destroy());
-    stream.pipe(res);
+    if (req.method === 'HEAD') { res.end(); return true; }
+    return new Promise((resolve) => {
+      const stream = fss.createReadStream(abs, { start, end, autoClose: true });
+      stream.on('error', (e) => { res.destroy(e); resolve(true); });
+      stream.on('close', () => resolve(true));
+      stream.pipe(res);
+    });
   }
 }
 

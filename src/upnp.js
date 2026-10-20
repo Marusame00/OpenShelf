@@ -28,6 +28,9 @@ const CONN_MGR = 'urn:schemas-upnp-org:service:ConnectionManager:1';
 const XML_DECL = '<?xml version="1.0" encoding="utf-8"?>\n';
 
 export function setupUpnp({ roots, lib, store, port, log = console }) {
+  const debug = process.env.OSHELF_DEBUG_SSDP
+    ? (...a) => log.info('[ssdp]', ...a)
+    : () => {};
   const lan = lanIp();
   const udn = stableUdn();
   const base = `http://${lan}:${port}`;
@@ -83,7 +86,14 @@ export function setupUpnp({ roots, lib, store, port, log = console }) {
       '', '',
     ];
     const msg = Buffer.from(headers.join('\r\n'), 'utf8');
-    try { ssdp.send(msg, 0, msg.length, SSDP_PORT, SSDP_ADDR); } catch (e) { log.warn(`[upnp] announce failed: ${e.message}`); }
+    try {
+      ssdp.send(msg, 0, msg.length, SSDP_PORT, SSDP_ADDR);
+      // Unicast to the broadcast address reaches every LAN host even when
+      // the AP/router drops multicast (a common SSDP failure mode). BubbleUPnP
+      // keeps a listening socket on 1900, so this lands directly in it.
+      ssdp.send(msg, 0, msg.length, SSDP_PORT, '255.255.255.255');
+      debug('announce', nts, 'sent to', SSDP_ADDR + ' and broadcast');
+    } catch (e) { log.warn(`[upnp] announce failed: ${e.message}`); }
   }
 
   function onSsdpMessage(msg, rinfo) {
@@ -91,6 +101,7 @@ export function setupUpnp({ roots, lib, store, port, log = console }) {
     if (!text.includes('M-SEARCH')) return;
     const stMatch = /^ST:\s*(.+)$/im.exec(text);
     const st = stMatch ? stMatch[1].trim() : DEVICE_TYPE;
+    debug('M-SEARCH from', rinfo.address + ':' + rinfo.port, 'ST=' + st);
     if (st !== 'ssdp:all' && st !== 'upnp:rootdevice' && st !== DEVICE_TYPE && !st.includes(udn)) return;
     const reply = [
       'HTTP/1.1 200 OK',
@@ -105,6 +116,7 @@ export function setupUpnp({ roots, lib, store, port, log = console }) {
       '', '',
     ].join('\r\n');
     ssdp.send(Buffer.from(reply, 'utf8'), 0, reply.length, rinfo.port, rinfo.address);
+    debug('replied to', rinfo.address + ':' + rinfo.port);
   }
 
   // ---- HTTP handler installed via createApp({ extra }) ---------------------
@@ -400,6 +412,10 @@ function soapFault(res, code, desc) {
 function sendXml(res, xml) {
   res.writeHead(200, { 'Content-Type': 'text/xml; charset="utf-8"', 'Content-Length': Buffer.byteLength(xml) });
   res.end(xml);
+  // Must return true: upnpHandler's `return sendXml(...)` lines rely on a
+  // truthy value so the router doesn't fall through to its 404 and
+  // double-write (ERR_HTTP_HEADERS_SENT).
+  return true;
 }
 
 /** Namespace-tolerant XML field extraction for SOAP bodies (value is URL-decoded). */
