@@ -34,6 +34,12 @@ export function setupUpnp({ roots, lib, store, port, log = console }) {
   const lan = lanIp();
   const udn = stableUdn();
   const base = `http://${lan}:${port}`;
+  // Peers that should receive unicast NOTIFY alive packets directly
+  // (e.g. "192.168.0.16 192.168.0.20"). Unicast crosses APs/routers that
+  // drop multicast from WiFi clients, so discovery works even when the
+  // multicast path between this host and the peer is broken.
+  const peers = (process.env.OSHELF_PEERS || '')
+    .split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
   log.info(`[upnp] advertising OpenShelf as MediaServer at ${base} (UDN ${udn})`);
   log.info('[upnp] if devices do not see OpenShelf, Windows "SSDP Discovery" (SSDPSRV) is holding port 1900 - stop it from an admin prompt: net stop SSDPSRV');
 
@@ -92,7 +98,12 @@ export function setupUpnp({ roots, lib, store, port, log = console }) {
       // the AP/router drops multicast (a common SSDP failure mode). BubbleUPnP
       // keeps a listening socket on 1900, so this lands directly in it.
       ssdp.send(msg, 0, msg.length, SSDP_PORT, '255.255.255.255');
-      debug('announce', nts, 'sent to', SSDP_ADDR + ' and broadcast');
+      // Direct unicast to known peers: the bulletproof route that bypasses
+      // multicast forwarding problems entirely (see OSHELF_PEERS above).
+      for (const p of peers) {
+        ssdp.send(msg, 0, msg.length, SSDP_PORT, p);
+      }
+      debug('announce', nts, '-> multicast, broadcast' + (peers.length ? `, unicast peers: ${peers.join(', ')}` : ''));
     } catch (e) { log.warn(`[upnp] announce failed: ${e.message}`); }
   }
 

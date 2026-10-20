@@ -37,6 +37,8 @@ Command-line flags (env vars `OSHELF_*` also work):
 | `--host <addr>` | OSHELF_HOST | 0.0.0.0 | Bind address |
 | `--config <file>` | OSHELF_CONFIG | — | JSON config file (see below) |
 | `--cache-ttl <ms>` | OSHELF_CACHE_TTL | 30000 | Directory listing cache lifetime |
+| — | OSHELF_PEERS | — | Space-separated IPs to unicast SSDP NOTIFY to (e.g. a phone that misses multicast) |
+| — | OSHELF_DEBUG_SSDP | — | Set to 1 to log every SSDP packet (diagnostics) |
 | `--store <file>` | OSHELF_STORE | sortstore.json | Sort-preference store path |
 | `--data-dir <dir>` | OSHELF_DATA | store's dir | Runtime files directory |
 | `--upnp off` | OSHELF_UPNP | on | Disable the UPnP stub |
