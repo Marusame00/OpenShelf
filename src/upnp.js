@@ -113,7 +113,13 @@ export function setupUpnp({ roots, lib, store, port, log = console }) {
     const stMatch = /^ST:\s*(.+)$/im.exec(text);
     const st = stMatch ? stMatch[1].trim() : DEVICE_TYPE;
     debug('M-SEARCH from', rinfo.address + ':' + rinfo.port, 'ST=' + st);
-    if (st !== 'ssdp:all' && st !== 'upnp:rootdevice' && st !== DEVICE_TYPE && !st.includes(udn)) return;
+    // Answer device-type, rootdevice, ssdp:all, our UDN, and our embedded
+    // service types (BubbleUPnP and some other clients probe services by
+    // name). A service search gets its own USN (udn::serviceType).
+    const isService = st === CONTENT_DIR || st === CONN_MGR;
+    if (st !== 'ssdp:all' && st !== 'upnp:rootdevice' &&
+        st !== DEVICE_TYPE && !isService && !st.includes(udn)) return;
+    const usn = isService ? `${udn}::${st}` : `${udn}::${DEVICE_TYPE}`;
     const reply = [
       'HTTP/1.1 200 OK',
       'CACHE-CONTROL: max-age=1800',
@@ -122,7 +128,7 @@ export function setupUpnp({ roots, lib, store, port, log = console }) {
       `LOCATION: ${base}/upnp/device.xml`,
       serverHeader(),
       `ST: ${st}`,
-      `USN: ${udn}::${DEVICE_TYPE}`,
+      `USN: ${usn}`,
       'BOOTID.UPNP.ORG: 1',
       '', '',
     ].join('\r\n');

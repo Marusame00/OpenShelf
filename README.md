@@ -131,10 +131,11 @@ public/              index.html, app.js, style.css (no build step)
 
 ## DLNA / UPnP
 
-Implemented: OpenShelf announces itself as a UPnP MediaServer and answers ContentDirectory Browse over SOAP, reusing the exact same library + per-folder sort logic as the web UI — so your saved sorts apply to DLNA clients too. Use BubbleUPnP (or any UPnP browser) to find "OpenShelf", then browse your library folders; files stream with Range support through the same `/api/stream` endpoint (no transcoding).
+Implemented: OpenShelf announces itself as a UPnP MediaServer and answers ContentDirectory Browse over SOAP, reusing the exact same library + per-folder sort logic as the web UI — so your saved sorts apply to DLNA clients too. **Verified on an Xbox Series X (Media Player app): discovered OpenShelf on the LAN and played files back directly.** Browse your library folders from any UPnP client; files stream with Range support through the same `/api/stream` endpoint (no transcoding).
 
-- **Discovery**: SSDP on `239.255.255.250:1900` — responds to M-SEARCH and sends NOTIFY alive every 60 s. On Windows the OS "SSDP Discovery" service (SSDPSRV) binds port 1900 first and Windows delivers multicast to only one socket; if a device doesn't see OpenShelf, stop that service from an admin prompt: `net stop SSDPSRV` (this is the known Windows fix; OpenShelf logs this hint at startup).
+- **Discovery**: SSDP on `239.255.255.250:1900` — responds to M-SEARCH (device, rootdevice, `ssdp:all`, UDN, and embedded service types) and sends NOTIFY alive every 60 s to the multicast group, the local broadcast address, and any IPs in `OSHELF_PEERS` (some APs/routers drop WiFi multicast — unicast NOTIFY bypasses that). On Windows the OS "SSDP Discovery" service (SSDPSRV) binds port 1900 first and Windows delivers multicast to only one socket; if a device doesn't see OpenShelf, stop that service from an admin prompt: `net stop SSDPSRV` (the known Windows fix; OpenShelf logs this hint at startup).
 - Device description: `/upnp/device.xml`; services: ContentDirectory (`/upnp/control`) and ConnectionManager.
+- Note: BubbleUPnP for Android was observed probing only service search types while missing device-type announcements; the service-type answers above fix that, but if a client still misses OpenShelf, use its ⋮ menu to add the server by URL: `http://<host>:8090/upnp/device.xml`.
 - Sort memory travels: Browse applies the stored/inherited sort for each folder via `store.effective()`.
 - Toggle with `--upnp off` / `"upnp": false` in the config file.
 
