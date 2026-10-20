@@ -9,6 +9,10 @@ A lightweight, self-hosted media server that **serves your media files exactly a
 - **Per-folder sort memory**: each folder can have its own sort (Name, Date modified, Date added, Size, Type, Duration, Manual order) with asc/desc; folders with no saved sort use the global default. Sorts survive restarts and are keyed by folder path.
 - No transcoding, no user accounts, no cloud, no metadata scraping (v1 — room to grow).
 
+## AI assistance
+
+This project was built with the help of an AI coding agent (Abacus.AI), working conversationally with the author across design, implementation, debugging, and testing — including the end-to-end LAN tests run from an Android phone. The author set the requirements, reviewed the code, and ran/reviewed every test; AI was not used at runtime. As with any dependency, the code is MIT-licensed and you're welcome to audit it before running it against your own library.
+
 ## Requirements
 
 - Node.js **>= 18** (tested on 20.x), Windows or Linux.
