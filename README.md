@@ -1,13 +1,16 @@
 # OpenShelf
 
-A lightweight, self-hosted media server that **serves your media files exactly as they are** — no transcoding, ever. Direct HTTP streaming with full Range support, per-folder sort memory, and a simple web UI. A simpler alternative to Universal Media Server for the case UMS handles poorly: sorting any folder however you want, remembered per folder.
+A lightweight, self-hosted media server that **serves your media files exactly as they are** — no transcoding, ever. Direct HTTP streaming with full Range support, per-folder sort memory, a web UI, and DLNA for TVs and consoles. A simpler alternative to Universal Media Server for the case UMS handles poorly: sorting any folder however you want, remembered per folder.
+
+Barebones by default, with one optional extra: a small on-disk thumbnail cache so photo previews work on clients like the Xbox. Turn it off and OpenShelf is back to serving bytes and nothing else.
 
 ## What it is — and is not
 
 - Serves video, audio, image, and any other file byte-for-byte over HTTP (`206 Partial Content`, seeking works everywhere).
 - Browsable folder tree over one or more library roots.
 - **Per-folder sort memory**: each folder can have its own sort (Name, Date modified, Date added, Size, Type, Duration, Manual order) with asc/desc; folders with no saved sort use the global default. Sorts survive restarts and are keyed by folder path.
-- No transcoding, no user accounts, no cloud, no metadata scraping (v1 — room to grow).
+- **Optional thumbnail cache** (on by default, one checkbox to turn off): small JPEG previews of photos for DLNA clients, stored in `<data dir>/thumbs`, capped at a rolling size limit (default 300 MB, oldest removed first). Unchecking it deletes the folder and stops generating thumbnails. Originals are never modified or re-encoded.
+- Not a transcoder for video or audio (the only generated files are the optional photo thumbnails), no user accounts, no cloud, no metadata scraping (v1 — room to grow).
 
 ## AI assistance
 
@@ -77,6 +80,8 @@ JSON config file (keys mirror flags minus the ones given on the command line):
 | GET / PUT | `/api/default` | Global default sort |
 | GET / POST / DELETE | `/api/roots` | List / add (`{path}`) / remove (`?id=`) library roots |
 | GET | `/api/stream?root=&path=` | Ranged file streaming (also where `HEAD` lives) |
+| GET | `/api/thumb?root=&path=&size=tn\|sm` | Cached JPEG thumbnail of an image (404 when the cache is off) |
+| GET / PUT / DELETE | `/api/thumbs` | Cache status / `{enabled, maxMb}` settings (off clears it) / clear now |
 
 Browse response shape (abridged):
 
@@ -125,6 +130,7 @@ src/library.js       Lazy directory cache, classification, sorting
 src/sortstore.js     Per-folder sort persistence (JSON, atomic, adoption)
 src/probe.js         Zero-dependency mp4/mkv duration probing
 src/upnp.js          UPnP/DLNA: SSDP discovery + ContentDirectory SOAP
+src/thumbs.js        Optional thumbnail cache (size-capped, can be turned off)
 start.bat / stop.bat Windows launcher: start with browser, force-stop
 public/              index.html, app.js, style.css (no build step)
 ```
@@ -136,7 +142,7 @@ Implemented: OpenShelf announces itself as a UPnP MediaServer and answers Conten
 - **Discovery**: SSDP on `239.255.255.250:1900` — responds to M-SEARCH (device, rootdevice, `ssdp:all`, UDN, and embedded service types) and sends NOTIFY alive every 60 s to the multicast group, the local broadcast address, and any IPs in `OSHELF_PEERS` (some APs/routers drop WiFi multicast — unicast NOTIFY bypasses that). On Windows the OS "SSDP Discovery" service (SSDPSRV) binds port 1900 first and Windows delivers multicast to only one socket; if a device doesn't see OpenShelf, stop that service from an admin prompt: `net stop SSDPSRV` (the known Windows fix; OpenShelf logs this hint at startup).
 - Device description: `/upnp/device.xml`; services: ContentDirectory (`/upnp/control`) and ConnectionManager.
 - Note: BubbleUPnP for Android was observed probing only service search types while missing device-type announcements; the service-type answers above fix that, but if a client still misses OpenShelf, use its ⋮ menu to add the server by URL: `http://<host>:8090/upnp/device.xml`.
-- **Photos**: image items carry `resolution`, a DLNA profile (`JPEG_LRG`/`PNG_LRG` up to 1920x1200) and thumbnails (`/api/thumb`, 160px and 640px JPEG) cached on disk in `<data dir>/thumbs` (invalidated when the file changes). Originals are never modified. Resizing uses PowerShell/System.Drawing on Windows and ImageMagick (`convert`, or `OSHELF_MAGICK`) elsewhere; without it photos simply have no thumbnail. With these, the Xbox Media Player shows previews and offers "Set as background".
+- **Photos**: image items carry `resolution`, a DLNA profile (`JPEG_LRG`/`PNG_LRG` up to 1920x1200) and thumbnails (`/api/thumb`, 160px and 640px JPEG) cached on disk in `<data dir>/thumbs` (invalidated when the file changes; size-capped and optional, see above). Originals are never modified. Resizing uses PowerShell/System.Drawing on Windows and ImageMagick (`convert`, or `OSHELF_MAGICK`) elsewhere; without it photos simply have no thumbnail. With these, the Xbox Media Player shows previews and offers "Set as background".
 - Sort memory travels: Browse applies the stored/inherited sort for each folder via `store.effective()`.
 - Toggle with `--upnp off` / `"upnp": false` in the config file.
 

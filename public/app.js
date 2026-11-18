@@ -408,6 +408,29 @@ async function loadDefault() {
   el('default-dir').value = res.default.dir;
 }
 
+async function loadThumbs(res) {
+  try { res = res || await api('/api/thumbs'); } catch { el('thumbs-section').hidden = true; return; }
+  el('thumbs-enabled').checked = res.enabled;
+  el('thumbs-max').value = res.maxMb;
+  el('thumbs-max').disabled = !res.enabled;
+  el('thumbs-clear').disabled = !res.enabled;
+  el('thumbs-usage').textContent = `${(res.bytes / 1048576).toFixed(1)} MB in ${res.files} files (oldest are removed past the limit)`;
+}
+
+async function sendThumbs(method, body) {
+  try {
+    await loadThumbs(await api('/api/thumbs', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    }));
+  } catch (err) { alert(err.message); }
+}
+
+el('thumbs-enabled').onchange = () => sendThumbs('PUT', { enabled: el('thumbs-enabled').checked });
+el('thumbs-max').onchange = () => sendThumbs('PUT', { maxMb: Number(el('thumbs-max').value) });
+el('thumbs-clear').onclick = () => sendThumbs('DELETE');
+
 el('default-key').onchange = saveDefault;
 el('default-dir').onchange = saveDefault;
 
@@ -478,5 +501,6 @@ function fmtDuration(sec) {
   fillKeySelect(el('sort-key'), SORT_KEYS);
   fillKeySelect(el('default-key'), SORT_KEYS.filter(([v]) => v !== 'manual'));
   await loadDefault();
+  await loadThumbs();
   await loadRoots();
 })();

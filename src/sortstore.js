@@ -45,14 +45,15 @@ export class SortStore {
         defaultSort: { key: 'name', dir: 'asc', ...(parsed.defaultSort || {}) },
         folders: parsed.folders,
         roots: Array.isArray(parsed.roots) ? parsed.roots : [],
+        settings: { thumbsEnabled: true, thumbsMaxMb: 300, ...(parsed.settings || {}) },
       };
     } catch (err) {
       if (err.code === 'ENOENT') {
-        this.data = { defaultSort: { key: 'name', dir: 'asc' }, folders: {}, roots: [] };
+        this.data = { defaultSort: { key: 'name', dir: 'asc' }, folders: {}, roots: [], settings: { thumbsEnabled: true, thumbsMaxMb: 300 } };
       } else {
         // Corrupt store: back it up and start fresh instead of crashing.
         try { await fs.copyFile(this.file, this.file + '.bak'); } catch {}
-        this.data = { defaultSort: { key: 'name', dir: 'asc' }, folders: {}, roots: [] };
+        this.data = { defaultSort: { key: 'name', dir: 'asc' }, folders: {}, roots: [], settings: { thumbsEnabled: true, thumbsMaxMb: 300 } };
       }
     }
   }
@@ -124,6 +125,11 @@ export class SortStore {
 
   setDefault(sort) {
     this.data.defaultSort = sort;
+    return this.flush(true);
+  }
+
+  setSettings(patch) {
+    this.data.settings = { ...this.data.settings, ...patch };
     return this.flush(true);
   }
 

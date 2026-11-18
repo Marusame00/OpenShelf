@@ -286,7 +286,7 @@ export function setupUpnp({ roots, lib, store, port, thumbs = null, log = consol
     const protocolInfo = `http-get:*:${mediaType(name)}:${dlnaFeatures(name, pn)}`;
     const durXml = st.duration ? `<upnp:duration>${fmtDuration(st.duration)}</upnp:duration>` : '';
     let thumbXml = '';
-    if (kind === 'image' && thumbs && THUMB_EXTS.has(path.extname(name).toLowerCase())) {
+    if (kind === 'image' && thumbs && thumbs.isEnabled() && THUMB_EXTS.has(path.extname(name).toLowerCase())) {
       const tnUrl = `${base}/api/thumb?root=${encodeURIComponent(info.id)}&path=${encodeURIComponent(rel)}&size=tn`;
       const smUrl = `${base}/api/thumb?root=${encodeURIComponent(info.id)}&path=${encodeURIComponent(rel)}&size=sm`;
       const resInfo = (profile) => `http-get:*:image/jpeg:DLNA.ORG_PN=${profile};DLNA.ORG_OP=01;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=00D00000000000000000000000000000`;

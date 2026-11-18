@@ -43,7 +43,9 @@ const PS_SCRIPT = [
 
 const PS_ENCODED = Buffer.from(PS_SCRIPT, 'utf16le').toString('base64');
 
-export function createThumbs({ dir, concurrency = 2, log = console }) {
+export function createThumbs({ dir, concurrency = 2, enabled = true, maxMb = 300, log = console }) {
+  const state = { enabled, maxBytes: maxMb * 1024 * 1024 };
+  let pruning = null;
   const inflight = new Map();
   const queue = [];
   let active = 0;
@@ -79,7 +81,51 @@ export function createThumbs({ dir, concurrency = 2, log = console }) {
     });
   }
 
+  async function usage() {
+    const names = await fs.readdir(dir).catch(() => []);
+    const files = [];
+    for (const n of names) {
+      const st = await fs.stat(path.join(dir, n)).catch(() => null);
+      if (st && st.isFile()) files.push({ p: path.join(dir, n), size: st.size, t: st.mtimeMs });
+    }
+    return files;
+  }
+
+  async function prune() {
+    if (pruning) return pruning;
+    pruning = (async () => {
+      const files = await usage();
+      let total = files.reduce((a, f) => a + f.size, 0);
+      if (total <= state.maxBytes) return;
+      const target = state.maxBytes * 0.9;
+      files.sort((a, b) => a.t - b.t);
+      for (const f of files) {
+        if (total <= target) break;
+        await fs.rm(f.p, { force: true }).catch(() => {});
+        total -= f.size;
+      }
+    })().finally(() => { pruning = null; });
+    return pruning;
+  }
+
+  async function clear() {
+    const files = await usage();
+    await Promise.all(files.map((f) => fs.rm(f.p, { force: true }).catch(() => {})));
+  }
+
+  async function configure({ enabled: en, maxMb: mb }) {
+    if (typeof mb === 'number' && mb >= 10) state.maxBytes = mb * 1024 * 1024;
+    if (typeof en === 'boolean') state.enabled = en;
+    if (!state.enabled) await clear(); else await prune();
+  }
+
+  async function stats() {
+    const files = await usage();
+    return { enabled: state.enabled, maxMb: Math.round(state.maxBytes / 1048576), bytes: files.reduce((a, f) => a + f.size, 0), files: files.length };
+  }
+
   async function get(abs, variantKey) {
+    if (!state.enabled) return null;
     const variant = THUMB_VARIANTS[variantKey];
     if (!variant || !THUMB_EXTS.has(path.extname(abs).toLowerCase())) return null;
     const st = await fs.stat(abs).catch(() => null);
@@ -87,7 +133,10 @@ export function createThumbs({ dir, concurrency = 2, log = console }) {
     const key = crypto.createHash('sha1').update(`${abs}|${st.mtimeMs}|${st.size}|${variantKey}`).digest('hex');
     const out = path.join(dir, `${key}.jpg`);
     const hit = await fs.stat(out).catch(() => null);
-    if (hit && hit.size > 0) return out;
+    if (hit && hit.size > 0) {
+      if (Date.now() - hit.mtimeMs > 3600000) fs.utimes(out, new Date(), new Date()).catch(() => {});
+      return out;
+    }
     if (inflight.has(key)) return inflight.get(key);
     const p = run(async () => {
       mkdirDone ||= fs.mkdir(dir, { recursive: true });
@@ -96,6 +145,7 @@ export function createThumbs({ dir, concurrency = 2, log = console }) {
       try {
         await convert(abs, tmp, variant.max);
         await fs.rename(tmp, out);
+        prune().catch(() => {});
         return out;
       } catch (err) {
         await fs.rm(tmp, { force: true }).catch(() => {});
@@ -108,9 +158,11 @@ export function createThumbs({ dir, concurrency = 2, log = console }) {
   }
 
   function warm(abs) {
+    if (!state.enabled) return;
     get(abs, 'tn').catch(() => {});
     get(abs, 'sm').catch(() => {});
   }
 
-  return { get, warm };
+  prune().catch(() => {});
+  return { get, warm, clear, configure, stats, isEnabled: () => state.enabled };
 }

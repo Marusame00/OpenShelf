@@ -40,8 +40,19 @@
           </select>
         </div>
       </section>
+      <section id="thumbs-section">
+        <h2>Thumbnail cache</h2>
+        <label class="big-check"><input type="checkbox" id="thumbs-enabled"> Cache photo thumbnails</label>
+        <p class="hint">Needed for photo previews on Xbox/DLNA. Unchecking deletes the cache folder.</p>
+        <div class="row">
+          <label for="thumbs-max">Max size (MB)</label>
+          <input type="number" id="thumbs-max" min="10" step="50">
+          <button type="button" id="thumbs-clear">Clear now</button>
+        </div>
+        <p class="hint" id="thumbs-usage"></p>
+      </section>
       <section class="about">
-        <p>OpenShelf serves files exactly as stored — no transcoding, ever.</p>
+        <p>OpenShelf serves files exactly as stored — no transcoding. The only files it generates are optional photo thumbnails.</p>
       </section>
     </aside>
 

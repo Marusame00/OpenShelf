@@ -63,7 +63,7 @@ export function parseConfig(argv = process.argv.slice(2), env = process.env) {
 }
 
 export function printHelp() {
-  console.log(`OpenShelf — self-hosted media server (no transcoding)
+  console.log(`OpenShelf — self-hosted media server (no transcoding, optional thumbnail cache)
 
 Usage: node server.js [flags]
 

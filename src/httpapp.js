@@ -86,6 +86,21 @@ export function createApp({ roots, declaredRootIds = [], lib, store, extra, thum
       if (pathname === '/api/sort') return await sortRoutes(req, res, q);
       if (pathname === '/api/roots') return await rootsRoutes(req, res, q);
       if (pathname === '/api/default') return await defaultRoutes(req, res);
+      if (pathname === '/api/thumbs' && thumbs) {
+        if (req.method === 'PUT') {
+          const body = await readJson(req);
+          const patch = {};
+          if (typeof body.enabled === 'boolean') patch.thumbsEnabled = body.enabled;
+          if (typeof body.maxMb === 'number' && body.maxMb >= 10 && body.maxMb <= 100000) patch.thumbsMaxMb = Math.round(body.maxMb);
+          await store.setSettings(patch);
+          await thumbs.configure({ enabled: patch.thumbsEnabled, maxMb: patch.thumbsMaxMb });
+        } else if (req.method === 'DELETE') {
+          await thumbs.clear();
+        } else if (req.method !== 'GET') {
+          return json(res, 405, { error: { code: 'METHOD', message: 'Use GET, PUT or DELETE' } });
+        }
+        return json(res, 200, await thumbs.stats());
+      }
 
       if (pathname === '/api/stream') {
         const root = findRoot(q.get('root'));

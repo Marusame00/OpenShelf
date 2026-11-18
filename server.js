@@ -30,7 +30,12 @@ await store.load();
 const declaredRootIds = new Set(cfg.roots.map((r) => r.id));
 const roots = [...cfg.roots, ...store.getRoots()];
 const lib = new Library({ ttlMs: cfg.cacheTtlMs });
-const thumbs = createThumbs({ dir: path.resolve(cfg.dataDir, 'thumbs'), log: console });
+const thumbs = createThumbs({
+  dir: path.resolve(cfg.dataDir, 'thumbs'),
+  enabled: store.data.settings.thumbsEnabled !== false,
+  maxMb: store.data.settings.thumbsMaxMb,
+  log: console,
+});
 
 // Real UPnP/DLNA (MediaServer) — SSDP discovery + ContentDirectory SOAP.
 // Failure here never blocks serving: DLNA is auxiliary to the web UI.

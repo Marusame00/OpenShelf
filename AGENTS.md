@@ -6,7 +6,8 @@ Instructions for any agent (human or AI) working in this repository.
 
 OpenShelf is a lightweight, self-hosted media server: direct byte-for-byte HTTP
 streaming (no transcoding), per-folder sort memory with inheritance, a web UI,
-and DLNA/UPnP for smart TVs/consoles. Zero npm runtime dependencies, Node.js
+and DLNA/UPnP for smart TVs/consoles. Barebones by default; the one optional
+extra is a size-capped photo thumbnail cache that can be switched off. Zero npm runtime dependencies, Node.js
 >= 18 (ESM), Windows + Linux. See `README.md` for user-facing docs.
 
 ## Layout
@@ -19,6 +20,7 @@ and DLNA/UPnP for smart TVs/consoles. Zero npm runtime dependencies, Node.js
 | `src/library.js` | Lazy directory cache (TTL + mtime), file classification, sort functions |
 | `src/sortstore.js` | Per-folder sort persistence: atomic JSON writes, orphan (rename/move) adoption |
 | `src/probe.js` | Zero-dependency mp4/mkv duration probing |
+| `src/thumbs.js` | Optional on-disk JPEG thumbnail cache: LRU size cap, on/off, clear (PowerShell/System.Drawing on Windows, ImageMagick elsewhere) |
 | `src/upnp.js` | SSDP discovery, SOAP ContentDirectory `Browse`, unicast NOTIFY fallback |
 | `public/` | Web UI: `index.html`, `app.js`, `style.css` — no build step, no framework |
 | `start.bat` / `stop.bat` | Windows launchers (open browser / force-kill by PID) |
@@ -63,6 +65,10 @@ and DLNA/UPnP for smart TVs/consoles. Zero npm runtime dependencies, Node.js
 - `sortstore.json` at the repo root is a real runtime data file (not a
   fixture) — don't commit test-local versions over it; it's already
   `.gitignore`d pattern-wise where applicable, check before `git add -A`.
+- **Thumbnail cache must stay optional.** Settings (`thumbsEnabled`, `thumbsMaxMb`) live in `sortstore.json` under `settings`; off means no generation, no
+  `albumArtURI`/thumb `<res>` in Browse, and the `thumbs/` folder is cleared.
+  Xbox "Set as background" needs thumbnails plus image `resolution` and a
+  `DLNA.ORG_PN` profile in Browse; don't drop those.
 - avi/webm duration probing is not implemented (documented roadmap item in
   README) — don't claim duration support for those formats.
 
