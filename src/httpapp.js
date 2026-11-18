@@ -16,8 +16,9 @@ import fss from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
+import { THUMB_VARIANTS } from './thumbs.js';
 import {
-  Library, classify, mediaType, compareEntries, applyManualOrder, SORT_KEYS,
+  Library, classify, mediaType, dlnaFeatures, compareEntries, applyManualOrder, SORT_KEYS,
 } from './library.js';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8' };
@@ -36,7 +37,7 @@ const STATIC_MIME = {
   '.json': 'application/json',
 };
 
-export function createApp({ roots, declaredRootIds = [], lib, store, extra }) {
+export function createApp({ roots, declaredRootIds = [], lib, store, extra, thumbs = null }) {
   const server = createServer(asyncHandler(route));
 
   async function route(req, res) {
@@ -91,6 +92,31 @@ export function createApp({ roots, declaredRootIds = [], lib, store, extra }) {
         const abs = root ? resolveWithin(root.path, q.get('path') || '') : null;
         if (!abs) return json(res, 400, { error: { code: 'UNKNOWN_ROOT', message: 'Unknown root' } });
         return await serveRange(req, res, abs);
+      }
+
+      if (pathname === '/api/thumb' && thumbs) {
+        const root = findRoot(q.get('root'));
+        const abs = root ? resolveWithin(root.path, q.get('path') || '') : null;
+        if (!abs) return json(res, 400, { error: { code: 'UNKNOWN_ROOT', message: 'Unknown root' } });
+        const size = q.get('size') === 'sm' ? 'sm' : 'tn';
+        const file = await thumbs.get(abs, size);
+        if (!file) return json(res, 404, { error: { code: 'NO_THUMB', message: 'No thumbnail available' } });
+        const st = await fs.stat(file);
+        res.writeHead(200, {
+          'Content-Type': 'image/jpeg',
+          'Content-Length': st.size,
+          'Cache-Control': 'max-age=86400',
+          'transferMode.dlna.org': 'Interactive',
+          'contentFeatures.dlna.org': `DLNA.ORG_PN=${THUMB_VARIANTS[size].profile};DLNA.ORG_OP=00;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=00D00000000000000000000000000000`,
+        });
+        if (req.method === 'HEAD') { res.end(); return true; }
+        await new Promise((resolve) => {
+          const rs = fss.createReadStream(file);
+          rs.on('error', () => { res.destroy(); resolve(); });
+          res.on('close', resolve);
+          rs.pipe(res);
+        });
+        return true;
       }
 
       // Static UI
@@ -294,6 +320,8 @@ async function serveRange(req, res, abs) {
     'Content-Type': type,
     'Last-Modified': mtime,
     'Cache-Control': 'no-transform', // never transcode, never cache-chunk
+    'transferMode.dlna.org': classify(abs, false) === 'image' ? 'Interactive' : 'Streaming',
+    'contentFeatures.dlna.org': dlnaFeatures(abs),
   };
 
   const rangeHdr = req.headers.range;

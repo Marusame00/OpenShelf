@@ -4,3 +4,4 @@ sortstore.json
 openshelf.config.json
 *.log
 .DS_Store
+thumbs/

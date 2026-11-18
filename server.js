@@ -10,6 +10,8 @@ import { Library } from './src/library.js';
 import { createApp } from './src/httpapp.js';
 import { SortStore } from './src/sortstore.js';
 import { setupUpnp } from './src/upnp.js';
+import { createThumbs } from './src/thumbs.js';
+import path from 'node:path';
 
 const cfg = parseConfig();
 if (cfg.help) {
@@ -28,19 +30,20 @@ await store.load();
 const declaredRootIds = new Set(cfg.roots.map((r) => r.id));
 const roots = [...cfg.roots, ...store.getRoots()];
 const lib = new Library({ ttlMs: cfg.cacheTtlMs });
+const thumbs = createThumbs({ dir: path.resolve(cfg.dataDir, 'thumbs'), log: console });
 
 // Real UPnP/DLNA (MediaServer) — SSDP discovery + ContentDirectory SOAP.
 // Failure here never blocks serving: DLNA is auxiliary to the web UI.
 let upnpHandler = null;
 if (cfg.upnp !== false) {
   try {
-    upnpHandler = setupUpnp({ roots, lib, store, port: cfg.port, log: console });
+    upnpHandler = setupUpnp({ roots, lib, store, port: cfg.port, thumbs, log: console });
   } catch (err) {
     console.warn(`[upnp] disabled: ${err.message}`);
   }
 }
 
-const server = createApp({ roots, declaredRootIds: [...declaredRootIds], lib, store, extra: upnpHandler });
+const server = createApp({ roots, declaredRootIds: [...declaredRootIds], lib, store, extra: upnpHandler, thumbs });
 
 server.listen(cfg.port, cfg.host, () => {
   console.log(`OpenShelf listening on http://${cfg.host}:${cfg.port}`);

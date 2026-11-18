@@ -212,3 +212,31 @@ function readVint(buf, off, includeMarker = false) {
   }
   return { value: BigInt(value), bytes: len };
 }
+
+export async function probeImageSize(absPath) {
+  let fh;
+  try {
+    fh = await fs.promises.open(absPath, 'r');
+    const buf = Buffer.alloc(262144);
+    const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+    const b = buf.subarray(0, bytesRead);
+    if (b.length > 24 && b.readUInt32BE(0) === 0x89504e47) {
+      return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
+    }
+    if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+      let i = 2;
+      while (i + 9 < b.length) {
+        if (b[i] !== 0xff) { i++; continue; }
+        const m = b[i + 1];
+        if (m === 0xff) { i++; continue; }
+        if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
+          return { h: b.readUInt16BE(i + 5), w: b.readUInt16BE(i + 7) };
+        }
+        i += 2 + b.readUInt16BE(i + 2);
+      }
+    }
+  } catch { /* unreadable: no size */ } finally {
+    if (fh) await fh.close().catch(() => {});
+  }
+  return null;
+}

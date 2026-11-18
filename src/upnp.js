@@ -11,13 +11,15 @@
 // The HTTP stream endpoint (/api/stream) already does ranged serving, so
 // DIDL <res> URLs point straight at it — no transcoding, as always.
 
+import { THUMB_EXTS } from './thumbs.js';
+import { probeImageSize } from './probe.js';
 import dgram from 'node:dgram';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import fss from 'node:fs';
 import {
-  classify, compareEntries, applyManualOrder, mediaType,
+  classify, compareEntries, applyManualOrder, mediaType, dlnaFeatures,
 } from './library.js';
 
 const SSDP_ADDR = '239.255.255.250';
@@ -27,7 +29,7 @@ const CONTENT_DIR = 'urn:schemas-upnp-org:service:ContentDirectory:1';
 const CONN_MGR = 'urn:schemas-upnp-org:service:ConnectionManager:1';
 const XML_DECL = '<?xml version="1.0" encoding="utf-8"?>\n';
 
-export function setupUpnp({ roots, lib, store, port, log = console }) {
+export function setupUpnp({ roots, lib, store, port, thumbs = null, log = console }) {
   const debug = process.env.OSHELF_DEBUG_SSDP
     ? (...a) => log.info('[ssdp]', ...a)
     : () => {};
@@ -266,11 +268,34 @@ export function setupUpnp({ roots, lib, store, port, log = console }) {
     if (!st) return '';
     const name = path.basename(abs);
     const kind = classify(name, false);
-    const cls = { video: 'object.item.videoItem', audio: 'object.item.audioItem', image: 'object.item.imageItem' }[kind] || 'object.item';
+    const cls = { video: 'object.item.videoItem', audio: 'object.item.audioItem', image: 'object.item.imageItem.photo' }[kind] || 'object.item';
     const resUrl = `${base}/api/stream?root=${encodeURIComponent(info.id)}&path=${encodeURIComponent(rel)}`;
-    const protocolInfo = `http-get:*:${mediaType(name)}:DLNA.ORG_OP=01`;
+    let resAttrs = '';
+    let pn;
+    if (kind === 'image') {
+      const dim = await probeImageSize(abs);
+      if (dim) {
+        resAttrs = ` resolution="${dim.w}x${dim.h}"`;
+        const ext = path.extname(name).toLowerCase();
+        const prefix = ext === '.png' ? 'PNG' : 'JPEG';
+        if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') {
+          pn = dim.w <= 1920 && dim.h <= 1200 ? `${prefix}_LRG` : false;
+        }
+      }
+    }
+    const protocolInfo = `http-get:*:${mediaType(name)}:${dlnaFeatures(name, pn)}`;
     const durXml = st.duration ? `<upnp:duration>${fmtDuration(st.duration)}</upnp:duration>` : '';
-    return `<item id="${xmlEscape(objectIdFor(abs))}" parentID="${xmlEscape(parentId)}" restricted="1"><dc:title>${xmlEscape(name)}</dc:title><dc:date>${new Date(st.mtimeMs).toISOString().slice(0, 10)}</dc:date><upnp:class>${cls}</upnp:class>${durXml}<res protocolInfo="${xmlEscape(protocolInfo)}" size="${st.size}">${xmlEscape(resUrl)}</res></item>`;
+    let thumbXml = '';
+    if (kind === 'image' && thumbs && THUMB_EXTS.has(path.extname(name).toLowerCase())) {
+      const tnUrl = `${base}/api/thumb?root=${encodeURIComponent(info.id)}&path=${encodeURIComponent(rel)}&size=tn`;
+      const smUrl = `${base}/api/thumb?root=${encodeURIComponent(info.id)}&path=${encodeURIComponent(rel)}&size=sm`;
+      const resInfo = (profile) => `http-get:*:image/jpeg:DLNA.ORG_PN=${profile};DLNA.ORG_OP=01;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=00D00000000000000000000000000000`;
+      thumbXml = `<upnp:albumArtURI dlna:profileID="JPEG_TN">${xmlEscape(tnUrl)}</upnp:albumArtURI>`
+        + `<res protocolInfo="${xmlEscape(resInfo('JPEG_SM'))}">${xmlEscape(smUrl)}</res>`
+        + `<res protocolInfo="${xmlEscape(resInfo('JPEG_TN'))}">${xmlEscape(tnUrl)}</res>`;
+      thumbs.warm(abs);
+    }
+    return `<item id="${xmlEscape(objectIdFor(abs))}" parentID="${xmlEscape(parentId)}" restricted="1"><dc:title>${xmlEscape(name)}</dc:title><dc:date>${new Date(st.mtimeMs).toISOString().slice(0, 10)}</dc:date><upnp:class>${cls}</upnp:class>${durXml}<res protocolInfo="${xmlEscape(protocolInfo)}" size="${st.size}"${resAttrs}>${xmlEscape(resUrl)}</res>${thumbXml}</item>`;
   }
 
   // ---- object ids: base64url of the absolute path --------------------------

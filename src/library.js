@@ -47,6 +47,20 @@ export function mediaType(name) {
   return MIME[path.extname(name).toLowerCase()] || 'application/octet-stream';
 }
 
+const DLNA_IMAGE_PN = { '.jpg': 'JPEG_LRG', '.jpeg': 'JPEG_LRG', '.png': 'PNG_LRG' };
+const DLNA_FLAGS_STREAM = '01700000000000000000000000000000';
+const DLNA_FLAGS_IMAGE = '00D00000000000000000000000000000';
+
+export function dlnaFeatures(name, profile) {
+  const ext = path.extname(name).toLowerCase();
+  const pn = profile === false ? null : (profile || DLNA_IMAGE_PN[ext]);
+  const isImage = classify(name, false) === 'image';
+  const parts = [];
+  if (pn && isImage) parts.push(`DLNA.ORG_PN=${pn}`);
+  parts.push('DLNA.ORG_OP=01', 'DLNA.ORG_CI=0', `DLNA.ORG_FLAGS=${isImage ? DLNA_FLAGS_IMAGE : DLNA_FLAGS_STREAM}`);
+  return parts.join(';');
+}
+
 export class Library {
   constructor({ ttlMs = 30000 } = {}) {
     this.ttlMs = ttlMs;
