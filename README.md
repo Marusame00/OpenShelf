@@ -42,7 +42,11 @@ Download the source zip from the releases page: <https://github.com/Marusame00/O
 
 **3. Point it at your media.**
 
-In the extracted folder, copy `openshelf.config.example.json` to `openshelf.config.json` and edit the `roots` list to your own folders:
+You can do this from the web UI, or in the config file — either works, and you can mix them.
+
+**Easiest — from the web UI.** Start OpenShelf (step 4), then in the sidebar click **+ Folder**, type or paste a path such as `D:/Media/Movies`, and press **Add**. The folder appears in the Libraries list immediately and is saved in `sortstore.json`, so it is still there next time you start. Remove one with the ✕ next to it. No restart, no file editing.
+
+**Or in the config file.** In the extracted folder, copy `openshelf.config.example.json` to `openshelf.config.json` and edit the `roots` list:
 
 ```json
 {
@@ -51,7 +55,7 @@ In the extracted folder, copy `openshelf.config.example.json` to `openshelf.conf
 }
 ```
 
-Use forward slashes (`D:/Media`) or doubled backslashes (`D:\\Media`). If you skip this step, OpenShelf serves its own folder so you can still look around.
+Use forward slashes (`D:/Media`) or doubled backslashes (`D:\\Media`). Folders listed here are re-declared on every start and cannot be removed from the UI; folders added in the UI live in `sortstore.json` and can. If you skip this step entirely, OpenShelf serves its own folder so you can still look around.
 
 **4. Run it.**
 
@@ -61,7 +65,7 @@ That is the whole install. No accounts, no database, no package install, no admi
 
 ## Quick start
 
-**Windows:** double-click `start.bat` — it opens the web UI in your browser and serves your library (edit `openshelf.config.json` — copy the example first — to choose which folders are roots). `stop.bat` force-closes the server and frees its memory.
+**Windows:** double-click `start.bat` — it opens the web UI in your browser and serves your library. Add folders with **+ Folder** in the sidebar, or list them in `openshelf.config.json` (copy the example first). `stop.bat` force-closes the server and frees its memory.
 
 **Anywhere (Node >= 18, zero dependencies):**
 
