@@ -21,6 +21,44 @@ This project was built with the help of an AI coding agent (Abacus.AI), working 
 - Node.js **>= 18** (tested on 20.x), Windows or Linux.
 - Zero runtime dependencies.
 
+## Simple setup (start here)
+
+Never run anything like this before? Four steps, about five minutes.
+
+**1. Install Node.js — once per computer.**
+
+Node.js is a runtime, the same kind of thing as Python: a program you install so the machine can run the code. OpenShelf is written in JavaScript and Node is what executes it. There is nothing else to install.
+
+- Download the **LTS** installer: <https://nodejs.org/en/download>
+- Windows: run the `.msi` and click through. It installs to `Program Files` and adds itself to PATH automatically — no checkbox to remember.
+- Linux: use your package manager or the NodeSource instructions on that page.
+- It also installs `npm`, Node's package manager. OpenShelf does not use it (zero dependencies), so you can ignore it.
+
+Check it worked — open a terminal and run `node --version`. You should see `v18` or higher.
+
+**2. Get OpenShelf.**
+
+Download the source zip from the releases page: <https://github.com/Marusame00/OpenShelf/releases/latest> ("Source code (zip)"), then extract it anywhere — for example `C:\OpenShelf`. There is no installer and no build step.
+
+**3. Point it at your media.**
+
+In the extracted folder, copy `openshelf.config.example.json` to `openshelf.config.json` and edit the `roots` list to your own folders:
+
+```json
+{
+  "port": 8090,
+  "roots": ["D:/Media/Movies", "D:/Media/Music", "D:/Pictures"]
+}
+```
+
+Use forward slashes (`D:/Media`) or doubled backslashes (`D:\\Media`). If you skip this step, OpenShelf serves its own folder so you can still look around.
+
+**4. Run it.**
+
+Double-click `start.bat`. It opens <http://localhost:8090> in your browser and serves your library. `stop.bat` shuts it down.
+
+That is the whole install. No accounts, no database, no package install, no admin rights after step 1.
+
 ## Quick start
 
 **Windows:** double-click `start.bat` — it opens the web UI in your browser and serves your library (edit `openshelf.config.json` — copy the example first — to choose which folders are roots). `stop.bat` force-closes the server and frees its memory.
