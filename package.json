@@ -1,6 +1,6 @@
 {
   "name": "openshelf",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "OpenShelf — a lightweight, self-hosted media server. Direct streaming, no transcoding, per-folder sort memory, DLNA, and an optional size-capped photo thumbnail cache.",
   "type": "module",
   "main": "server.js",
