@@ -5,3 +5,7 @@ openshelf.config.json
 *.log
 .DS_Store
 thumbs/
+dist/
+build/out/
+build/icon/
+build/tools/

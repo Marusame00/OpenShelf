@@ -63,6 +63,29 @@ Double-click `start.bat`. It opens <http://localhost:8090> in your browser and s
 
 That is the whole install. No accounts, no database, no package install, no admin rights after step 1.
 
+## Windows app (no command line)
+
+If you would rather not run a `.bat` file, there are two Windows builds on the
+[releases page](https://github.com/Marusame00/OpenShelf/releases/latest). Both
+include `node.exe`, so **Node.js does not need to be installed**.
+
+| Build | What it is |
+|---|---|
+| `OpenShelf-<version>-setup-win-x64.exe` | Installer: Start Menu shortcut, optional desktop shortcut and run-at-login, proper uninstaller. Installs per-user by default, so no admin prompt. |
+| `OpenShelf-<version>-portable-win-x64.zip` | Unzip anywhere and run `OpenShelf.exe`. Nothing is written outside the folder except the thumbnail cache and log in `%LOCALAPPDATA%\OpenShelf`. |
+
+`OpenShelf.exe` is a small tray launcher: it starts the server with no console
+window, waits for the port, opens the browser, and puts an **OS** icon in the
+notification area. Right-click it for **Open OpenShelf**, **Open app folder**,
+**Open server log**, and **Stop and exit**. Double-click opens the UI again.
+
+- It reads `openshelf.config.json` next to the exe if present, otherwise serves
+  its own folder — same as `start.bat`.
+- Server output goes to `%LOCALAPPDATA%\OpenShelf\logs\server.log`.
+- Only one instance runs at a time; launching again just reopens the browser.
+- The builds are unsigned, so Windows SmartScreen may show "Windows protected
+  your PC" on first run: **More info → Run anyway**.
+
 ## Quick start
 
 **Windows:** double-click `start.bat` — it opens the web UI in your browser and serves your library. Add folders with **+ Folder** in the sidebar, or list them in `openshelf.config.json` (copy the example first). `stop.bat` force-closes the server and frees its memory.

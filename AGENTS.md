@@ -24,6 +24,7 @@ extra is a size-capped photo thumbnail cache that can be switched off. Zero npm 
 | `src/upnp.js` | SSDP discovery, SOAP ContentDirectory `Browse`, unicast NOTIFY fallback |
 | `public/` | Web UI: `index.html`, `app.js`, `style.css` — no build step, no framework |
 | `start.bat` / `stop.bat` | Windows launchers (open browser / force-kill by PID) |
+| `build/` | Windows packaging: `launcher.cs` (tray exe), `make-icon.ps1` + `pack-ico.js` (icon), `build-win.js` (portable zip), `openshelf.iss` (Inno Setup installer) |
 
 ## Build / check / run
 
@@ -37,6 +38,13 @@ extra is a size-capped photo thumbnail cache that can be switched off. Zero npm 
   against `/api/stream` (Range/HEAD/empty-file edge cases) and manual UI/DLNA
   checks on real hardware (Xbox, Android). When adding tests, prefer Node's
   built-in `node:test` to keep the zero-dependency promise.
+- Windows packaging (all optional, none needed to run from source):
+  `powershell -File build/make-icon.ps1 && node build/pack-ico.js` then
+  `csc.exe -target:winexe -win32icon:build/icon.ico -r:System.Windows.Forms.dll
+  -r:System.Drawing.dll build/launcher.cs` (the in-box .NET Framework compiler,
+  C# 5 syntax only), `node build/build-win.js` for the portable zip, and
+  `ISCC.exe build/openshelf.iss` for the installer. `dist/` and the downloaded
+  tooling are git-ignored.
 
 ## Conventions / gotchas (hard-won — see also the `zero-dep-media-server` skill)
 
