@@ -15,7 +15,7 @@ const outDir = path.join(dist, 'OpenShelf-portable');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 const APP_FILES = ['server.js', 'package.json', 'LICENSE', 'README.md', 'openshelf.config.example.json'];
-const APP_DIRS = ['src', 'public'];
+const APP_DIRS = ['src', 'public', 'docs'];
 
 function rmrf(p) {
   fs.rmSync(p, { recursive: true, force: true });
