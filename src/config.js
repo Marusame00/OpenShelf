@@ -5,6 +5,7 @@
 // minus the ones given explicitly on the command line.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 export function parseConfig(argv = process.argv.slice(2), env = process.env) {
@@ -16,6 +17,7 @@ export function parseConfig(argv = process.argv.slice(2), env = process.env) {
     cacheTtlMs: parseInt(env.OSHELF_CACHE_TTL || '30000', 10),
     storeFile: env.OSHELF_STORE || 'sortstore.json',
     dataDir: env.OSHELF_DATA || null,
+    thumbsDir: env.OSHELF_THUMBS || null,
     upnp: env.OSHELF_UPNP !== 'off' && env.OSHELF_UPNP !== '0',
   };
 
@@ -28,7 +30,7 @@ export function parseConfig(argv = process.argv.slice(2), env = process.env) {
   }
   if (cfg.configFile) {
     const fileCfg = JSON.parse(fs.readFileSync(cfg.configFile, 'utf8'));
-  for (const k of ['host', 'port', 'roots', 'cacheTtlMs', 'storeFile', 'dataDir', 'upnp']) {
+  for (const k of ['host', 'port', 'roots', 'cacheTtlMs', 'storeFile', 'dataDir', 'thumbsDir', 'upnp']) {
     if (fileCfg[k] !== undefined) cfg[k] = fileCfg[k];
   }
   }
@@ -43,6 +45,7 @@ export function parseConfig(argv = process.argv.slice(2), env = process.env) {
     else if (f === '--cache-ttl') cfg.cacheTtlMs = parseInt(val(), 10);
     else if (f === '--store') cfg.storeFile = val();
     else if (f === '--data-dir') cfg.dataDir = val();
+    else if (f === '--thumbs-dir') cfg.thumbsDir = val();
     else if (f === '--config') { i += 1; } // consumed above
     else if (f === '-h' || f === '--help') { cfg.help = true; }
   }
@@ -53,6 +56,18 @@ export function parseConfig(argv = process.argv.slice(2), env = process.env) {
   // dataDir holds runtime files (store, logs). Default: next to the store.
   if (!cfg.dataDir) cfg.dataDir = path.dirname(path.resolve(cfg.storeFile));
   if (!cfg.storeFile) cfg.storeFile = path.resolve(cfg.dataDir, 'sortstore.json');
+
+  // Thumbnails default to the per-user cache folder, never the app folder:
+  // that keeps the cache writable without admin rights even when OpenShelf
+  // itself lives somewhere protected (Program Files, another user's profile).
+  if (!cfg.thumbsDir) {
+    const base = process.platform === 'win32'
+      ? (env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'))
+      : (env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'));
+    cfg.thumbsDir = path.join(base, 'OpenShelf', 'thumbs');
+  } else {
+    cfg.thumbsDirExplicit = true;
+  }
 
   if (cfg.roots.length === 0 && !cfg.help) {
     // A sensible dev default: if the user passed nothing, serve the current
@@ -71,10 +86,11 @@ Usage: node server.js [flags]
   --port <n>        HTTP port              (default 8090, env OSHELF_PORT)
   --host <addr>     Bind address           (default 0.0.0.0, env OSHELF_HOST)
   --config <file>   JSON config file with keys: host, port, roots, cacheTtlMs,
-                    storeFile, dataDir
+                    storeFile, dataDir, thumbsDir
   --cache-ttl <ms>  Directory cache lifetime (default 30000)
   --store <file>    Sort-preference store file (default sortstore.json)
   --data-dir <dir>  Directory for runtime files (default: store's dir)
+  --thumbs-dir <dir> Thumbnail cache folder (default: per-user cache dir)
   -h, --help        Show this help
 
 Example:

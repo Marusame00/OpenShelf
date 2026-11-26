@@ -20,7 +20,7 @@ extra is a size-capped photo thumbnail cache that can be switched off. Zero npm 
 | `src/library.js` | Lazy directory cache (TTL + mtime), file classification, sort functions |
 | `src/sortstore.js` | Per-folder sort persistence: atomic JSON writes, orphan (rename/move) adoption |
 | `src/probe.js` | Zero-dependency mp4/mkv duration probing |
-| `src/thumbs.js` | Optional on-disk JPEG thumbnail cache: LRU size cap, on/off, clear (PowerShell/System.Drawing on Windows, ImageMagick elsewhere) |
+| `src/thumbs.js` | Optional on-disk JPEG thumbnail cache: LRU size cap, on/off, clear (PowerShell/System.Drawing on Windows, ImageMagick elsewhere). Default dir is the per-user cache folder (`--thumbs-dir` / `OSHELF_THUMBS` to override) so no admin rights are needed |
 | `src/upnp.js` | SSDP discovery, SOAP ContentDirectory `Browse`, unicast NOTIFY fallback |
 | `public/` | Web UI: `index.html`, `app.js`, `style.css` — no build step, no framework |
 | `start.bat` / `stop.bat` | Windows launchers (open browser / force-kill by PID) |

@@ -30,8 +30,12 @@ await store.load();
 const declaredRootIds = new Set(cfg.roots.map((r) => r.id));
 const roots = [...cfg.roots, ...store.getRoots()];
 const lib = new Library({ ttlMs: cfg.cacheTtlMs });
+const legacyThumbs = path.resolve(cfg.dataDir, 'thumbs');
+const thumbsDir = !cfg.thumbsDirExplicit && fs.existsSync(legacyThumbs) && !fs.existsSync(cfg.thumbsDir)
+  ? legacyThumbs
+  : cfg.thumbsDir;
 const thumbs = createThumbs({
-  dir: path.resolve(cfg.dataDir, 'thumbs'),
+  dir: thumbsDir,
   enabled: store.data.settings.thumbsEnabled !== false,
   maxMb: store.data.settings.thumbsMaxMb,
   log: console,
@@ -53,6 +57,7 @@ const server = createApp({ roots, declaredRootIds: [...declaredRootIds], lib, st
 server.listen(cfg.port, cfg.host, () => {
   console.log(`OpenShelf listening on http://${cfg.host}:${cfg.port}`);
   for (const r of cfg.roots) console.log(`  root: ${r.path}`);
+  console.log(`  thumbs: ${thumbsDir}${thumbs.isEnabled() ? '' : ' (disabled)'}`);
 });
 
 process.on('SIGINT', () => { server.close(() => process.exit(0)); });
