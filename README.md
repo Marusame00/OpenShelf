@@ -4,12 +4,14 @@ A lightweight, self-hosted media server that **serves your media files exactly a
 
 Barebones by default, with one optional extra: a small on-disk thumbnail cache so photo previews work on clients like the Xbox. Turn it off and OpenShelf is back to serving bytes and nothing else.
 
+![OpenShelf web UI: library sidebar with per-folder sorts and the thumbnail cache controls, and a folder listing with type, size and date](docs/screenshot.png)
+
 ## What it is — and is not
 
 - Serves video, audio, image, and any other file byte-for-byte over HTTP (`206 Partial Content`, seeking works everywhere).
 - Browsable folder tree over one or more library roots.
 - **Per-folder sort memory**: each folder can have its own sort (Name, Date modified, Date added, Size, Type, Duration, Manual order) with asc/desc; folders with no saved sort use the global default. Sorts survive restarts and are keyed by folder path.
-- **Optional thumbnail cache** (on by default, one checkbox to turn off): small JPEG previews of photos for DLNA clients, stored in `<data dir>/thumbs`, capped at a rolling size limit (default 300 MB, oldest removed first). Unchecking it deletes the folder and stops generating thumbnails. Originals are never modified or re-encoded.
+- **Optional thumbnail cache** (on by default, one checkbox to turn off): small JPEG previews of photos for DLNA clients, stored in the per-user cache folder (`%LOCALAPPDATA%\OpenShelf\thumbs` on Windows, `~/.cache/OpenShelf/thumbs` elsewhere), capped at a rolling size limit (default 300 MB, oldest removed first). Unchecking it deletes the folder and stops generating thumbnails. Originals are never modified or re-encoded.
 - Not a transcoder for video or audio (the only generated files are the optional photo thumbnails), no user accounts, no cloud, no metadata scraping (v1 — room to grow).
 
 ## AI assistance
@@ -18,12 +20,47 @@ This project was built with the help of an AI coding agent (Abacus.AI), working 
 
 ## Requirements
 
-- Node.js **>= 18** (tested on 20.x), Windows or Linux.
+- **Windows:** nothing — the installer and portable zip bundle `node.exe`.
+- **From source / Linux:** Node.js **>= 18** (tested on 20.x).
 - Zero runtime dependencies.
 
 ## Simple setup (start here)
 
-Never run anything like this before? Four steps, about five minutes.
+Never run anything like this before? On Windows it is one download and one
+double-click — **Node.js is not needed**, the installer bundles it.
+
+**1. Download the installer.**
+
+From the [releases page](https://github.com/Marusame00/OpenShelf/releases/latest),
+take `OpenShelf-<version>-setup-win-x64.exe`. Prefer no installation? Take
+`OpenShelf-<version>-portable-win-x64.zip` instead and skip to step 3.
+
+**2. Run it.**
+
+Double-click the `.exe` and click through. It installs per-user, so there is no
+admin prompt, and adds a Start Menu shortcut. Windows SmartScreen may warn that
+the app is unsigned — **More info → Run anyway**.
+
+**3. Start OpenShelf.**
+
+Launch **OpenShelf** from the Start Menu (or run `OpenShelf.exe` from the
+unzipped portable folder). An **OS** icon appears in the notification area and
+the web UI opens at <http://localhost:8090>. There is no console window.
+Right-click the tray icon for **Open OpenShelf**, **Open app folder**,
+**Open server log**, and **Stop and exit**.
+
+**4. Point it at your media.**
+
+In the sidebar click **+ Folder**, paste a path such as `D:/Media/Movies`, and
+press **Add**. It appears in the Libraries list immediately and is saved in
+`sortstore.json`, so it is still there next time you start. Remove one with the
+✕ next to it. No restart, no file editing.
+
+That is the whole install. No accounts, no database, no package install.
+
+### Running from source instead
+
+Linux, or you would rather run the JavaScript directly:
 
 **1. Install Node.js — once per computer.**
 
@@ -38,7 +75,7 @@ Check it worked — open a terminal and run `node --version`. You should see `v1
 
 **2. Get OpenShelf.**
 
-Download the source zip from the releases page: <https://github.com/Marusame00/OpenShelf/releases/latest> ("Source code (zip)"), then extract it anywhere — for example `C:\OpenShelf`. There is no installer and no build step.
+Download the source zip from the releases page: <https://github.com/Marusame00/OpenShelf/releases/latest> ("Source code (zip)"), then extract it anywhere — for example `C:\OpenShelf`. There is no build step.
 
 **3. Point it at your media.**
 
@@ -63,11 +100,11 @@ Double-click `start.bat`. It opens <http://localhost:8090> in your browser and s
 
 That is the whole install. No accounts, no database, no package install, no admin rights after step 1.
 
-## Windows app (no command line)
+## Windows builds in detail
 
-If you would rather not run a `.bat` file, there are two Windows builds on the
-[releases page](https://github.com/Marusame00/OpenShelf/releases/latest). Both
-include `node.exe`, so **Node.js does not need to be installed**.
+Both Windows builds on the
+[releases page](https://github.com/Marusame00/OpenShelf/releases/latest) include
+`node.exe`, so **Node.js does not need to be installed**.
 
 | Build | What it is |
 |---|---|
@@ -88,7 +125,7 @@ notification area. Right-click it for **Open OpenShelf**, **Open app folder**,
 
 ## Quick start
 
-**Windows:** double-click `start.bat` — it opens the web UI in your browser and serves your library. Add folders with **+ Folder** in the sidebar, or list them in `openshelf.config.json` (copy the example first). `stop.bat` force-closes the server and frees its memory.
+**Windows:** run `OpenShelf-<version>-setup-win-x64.exe` from the [releases page](https://github.com/Marusame00/OpenShelf/releases/latest) and launch **OpenShelf** from the Start Menu — no console, no Node install. Running from source instead: double-click `start.bat`, which opens the web UI and serves your library; `stop.bat` force-closes it. Add folders with **+ Folder** in the sidebar, or list them in `openshelf.config.json` (copy the example first).
 
 **Anywhere (Node >= 18, zero dependencies):**
 
@@ -198,6 +235,8 @@ src/upnp.js          UPnP/DLNA: SSDP discovery + ContentDirectory SOAP
 src/thumbs.js        Optional thumbnail cache (size-capped, can be turned off)
 start.bat / stop.bat Windows launcher: start with browser, force-stop
 public/              index.html, app.js, style.css (no build step)
+docs/screenshot.png  Web UI screenshot used in this README
+build/               Windows packaging: icon, C# tray launcher, Inno Setup script
 ```
 
 ## DLNA / UPnP
