@@ -18,6 +18,8 @@ export const THUMB_VARIANTS = {
 export const THUMB_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp']);
 
 const PS_SCRIPT = [
+  "$ErrorActionPreference = 'Stop'",
+  'try {',
   'Add-Type -AssemblyName System.Drawing',
   '$img = [System.Drawing.Image]::FromFile($env:OSH_IN)',
   'try {',
@@ -39,6 +41,10 @@ const PS_SCRIPT = [
   '  $bmp.Save($env:OSH_OUT, [System.Drawing.Imaging.ImageFormat]::Jpeg)',
   '  $g.Dispose(); $bmp.Dispose()',
   '} finally { $img.Dispose() }',
+  '} catch {',
+  '  [Console]::Error.WriteLine($_.Exception.Message)',
+  '  exit 1',
+  '}',
 ].join('\n');
 
 const PS_ENCODED = Buffer.from(PS_SCRIPT, 'utf16le').toString('base64');
@@ -68,7 +74,15 @@ export function createThumbs({ dir, concurrency = 2, enabled = true, maxMb = 300
 
   function convert(src, out, max) {
     return new Promise((resolve, reject) => {
-      const done = (err) => (err ? reject(err) : resolve());
+      const done = (err, stdout, stderr) => {
+        if (!err) return resolve();
+        // PowerShell puts the real reason on stderr; err.message is just the
+        // (enormous) command line, so never log that.
+        const lines = String(stderr || '').split('\n').map((l) => l.trim())
+          .filter((l) => l && !l.startsWith('<'));
+        const detail = lines.length ? lines[lines.length - 1] : (err.code || 'conversion failed');
+        reject(new Error(detail.slice(0, 200)));
+      };
       if (process.platform === 'win32') {
         execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', PS_ENCODED], {
           env: { ...process.env, OSH_IN: src, OSH_OUT: out, OSH_MAX: String(max) },
@@ -79,6 +93,28 @@ export function createThumbs({ dir, concurrency = 2, enabled = true, maxMb = 300
         execFile(bin, ['-auto-orient', '-thumbnail', `${max}x${max}>`, '-background', 'white', '-flatten', `${src}[0]`, `jpg:${out}`], { timeout: 30000 }, done);
       }
     });
+  }
+
+  // Windows refuses to rename over a file another process holds open (EPERM),
+  // which happens when a DLNA client is still reading the thumbnail. Retry a
+  // few times, and treat an existing non-empty target as success.
+  async function renameInto(tmp, out) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await fs.rename(tmp, out);
+        return true;
+      } catch (err) {
+        const retryable = err.code === 'EPERM' || err.code === 'EACCES' || err.code === 'EEXIST';
+        if (!retryable) throw err;
+        const cur = await fs.stat(out).catch(() => null);
+        if (cur && cur.isFile() && cur.size > 0) {
+          await fs.rm(tmp, { force: true }).catch(() => {});
+          return true;
+        }
+        if (attempt >= 5) throw err;
+        await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+      }
+    }
   }
 
   async function usage() {
@@ -133,7 +169,7 @@ export function createThumbs({ dir, concurrency = 2, enabled = true, maxMb = 300
     const key = crypto.createHash('sha1').update(`${abs}|${st.mtimeMs}|${st.size}|${variantKey}`).digest('hex');
     const out = path.join(dir, `${key}.jpg`);
     const hit = await fs.stat(out).catch(() => null);
-    if (hit && hit.size > 0) {
+    if (hit && hit.isFile() && hit.size > 0) {
       if (Date.now() - hit.mtimeMs > 3600000) fs.utimes(out, new Date(), new Date()).catch(() => {});
       return out;
     }
@@ -144,12 +180,12 @@ export function createThumbs({ dir, concurrency = 2, enabled = true, maxMb = 300
       const tmp = `${out}.${process.pid}.tmp.jpg`;
       try {
         await convert(abs, tmp, variant.max);
-        await fs.rename(tmp, out);
+        await renameInto(tmp, out);
         prune().catch(() => {});
         return out;
       } catch (err) {
         await fs.rm(tmp, { force: true }).catch(() => {});
-        log.warn(`[thumbs] ${path.basename(abs)}: ${err.message.split('\n')[0]}`);
+        log.warn(`[thumbs] ${path.basename(abs)}: ${String(err.message).slice(0, 200)}`);
         return null;
       }
     }).finally(() => inflight.delete(key));
