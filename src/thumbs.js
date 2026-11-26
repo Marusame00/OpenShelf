@@ -21,7 +21,23 @@ const PS_SCRIPT = [
   "$ErrorActionPreference = 'Stop'",
   'try {',
   'Add-Type -AssemblyName System.Drawing',
-  '$img = [System.Drawing.Image]::FromFile($env:OSH_IN)',
+  'Add-Type -AssemblyName PresentationCore',
+  '$src = $env:OSH_IN',
+  '$img = $null',
+  'try { $img = [System.Drawing.Image]::FromFile($src) } catch { $img = $null }',
+  'if ($null -eq $img) {',
+  '  $fs = [System.IO.File]::OpenRead($src)',
+  '  try {',
+  '    $dec = [System.Windows.Media.Imaging.BitmapDecoder]::Create($fs, [System.Windows.Media.Imaging.BitmapCreateOptions]::PreservePixelFormat, [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)',
+  '    $conv = New-Object System.Windows.Media.Imaging.FormatConvertedBitmap($dec.Frames[0], [System.Windows.Media.PixelFormats]::Bgra32, $null, 0)',
+  '    $w0 = $conv.PixelWidth; $h0 = $conv.PixelHeight',
+  '    $img = New-Object System.Drawing.Bitmap($w0, $h0, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)',
+  '    $rect = New-Object System.Drawing.Rectangle(0, 0, $w0, $h0)',
+  '    $bd = $img.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::WriteOnly, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)',
+  '    $conv.CopyPixels([System.Windows.Int32Rect]::Empty, $bd.Scan0, $bd.Stride * $h0, $bd.Stride)',
+  '    $img.UnlockBits($bd)',
+  '  } finally { $fs.Dispose() }',
+  '}',
   'try {',
   '  if ($img.PropertyIdList -contains 0x0112) {',
   '    $o = $img.GetPropertyItem(0x0112).Value[0]',
@@ -52,6 +68,12 @@ const PS_ENCODED = Buffer.from(PS_SCRIPT, 'utf16le').toString('base64');
 export function createThumbs({ dir, concurrency = 2, enabled = true, maxMb = 300, log = console }) {
   const state = { enabled, maxBytes: maxMb * 1024 * 1024 };
   let pruning = null;
+  // A file that cannot be decoded will not decode next time either: remember
+  // the failure for a while so browsing a folder does not retry it on every
+  // request (and spam the log).
+  const failed = new Map();
+  const FAIL_TTL_MS = 10 * 60 * 1000;
+  const FAIL_MAX = 500;
   const inflight = new Map();
   const queue = [];
   let active = 0;
@@ -168,6 +190,9 @@ export function createThumbs({ dir, concurrency = 2, enabled = true, maxMb = 300
     if (!st || !st.isFile()) return null;
     const key = crypto.createHash('sha1').update(`${abs}|${st.mtimeMs}|${st.size}|${variantKey}`).digest('hex');
     const out = path.join(dir, `${key}.jpg`);
+    const bad = failed.get(key);
+    if (bad && Date.now() - bad < FAIL_TTL_MS) return null;
+    if (bad) failed.delete(key);
     const hit = await fs.stat(out).catch(() => null);
     if (hit && hit.isFile() && hit.size > 0) {
       if (Date.now() - hit.mtimeMs > 3600000) fs.utimes(out, new Date(), new Date()).catch(() => {});
@@ -181,10 +206,13 @@ export function createThumbs({ dir, concurrency = 2, enabled = true, maxMb = 300
       try {
         await convert(abs, tmp, variant.max);
         await renameInto(tmp, out);
+        failed.delete(key);
         prune().catch(() => {});
         return out;
       } catch (err) {
         await fs.rm(tmp, { force: true }).catch(() => {});
+        if (failed.size >= FAIL_MAX) failed.clear();
+        failed.set(key, Date.now());
         log.warn(`[thumbs] ${path.basename(abs)}: ${String(err.message).slice(0, 200)}`);
         return null;
       }
